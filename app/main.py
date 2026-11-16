@@ -41,6 +41,7 @@ from app.model_fit import annotate_models, pick_default_model
 from app.model_router import ROUTES, choose_model, classify_conversation, model_capabilities
 from app.web_decider import decide as decide_web
 from app import projects as project_store
+from app import agent as agent_mod
 from app import screen as screen_capture
 from app import commands as pc_commands
 from app.model_fit import classify as classify_fit, vram_total_gb
@@ -119,6 +120,7 @@ class ChatRequest(BaseModel):
     save_history: bool | None = None
     auto_route: bool | None = None  # None -> settings["auto_model_routing"]
     project: str | None = None  # attached project folder (ADR-012)
+    agent: bool | None = None  # coding agent mode (ADR-016)
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -353,6 +355,29 @@ async def stream_chat_endpoint(req: ChatRequest) -> StreamingResponse:
                 req.messages = [{k: v for k, v in m.items() if k != "images"} for m in req.messages]
                 task, reason = classify_conversation(req.messages)
 
+        # Coding agent (ADR-016): with a project attached, or when asked to build something new, Loki does
+        # the work in the folder itself (reads, writes, runs, fixes) instead of only printing code.
+        if req.agent and not has_screenshot:
+            last_user = next((str(m.get("content", "")) for m in reversed(req.messages) if m.get("role") == "user"), "")
+            if (project_root and task in ("code", "general", "reasoning")) or (
+                    not project_root and task == "code" and agent_mod.wants_new_project(last_user)):
+                names = [m["name"] for m in (await ollama_service.get_status()).get("installed_models", [])]
+                agent_model = agent_mod.pick_model(names, selected, auto)
+                if agent_model:
+                    created = False
+                    agent_root = project_root
+                    if not agent_root:
+                        try:
+                            agent_root, created = agent_mod.create_project_folder(last_user), True
+                        except (OSError, project_store.ProjectError):
+                            agent_root = None
+                    if agent_root:
+                        why = ("you asked me to build something, so I made a project folder for it" if created
+                               else "a project folder is attached")
+                        return StreamingResponse(
+                            agent_mod.run_agent(req.messages, agent_root, agent_model, settings.get("selected_model"), why, created),
+                            media_type="application/x-ndjson")
+
         if task == "pc" and web_plan.get("mode") == "search" and web_plan.get("reason") != "you asked to search":
             web_plan = {"mode": None}  # troubleshooting this PC needs its own diagnostics, not web results
 
@@ -543,6 +568,61 @@ async def apply_project_change(req: ProjectChangeRequest) -> dict[str, Any]:
 @app.post("/api/projects/undo")
 async def undo_project_change(req: ProjectUndoRequest) -> dict[str, Any]:
     return {"ok": True, "change": _project_call(project_store.undo_change, req.change_id)}
+
+
+@app.post("/api/projects/open")
+async def open_project_folder(req: ProjectPathRequest, request: Request) -> dict[str, Any]:
+    """Open a registered project folder in File Explorer."""
+    _require_same_app(request)
+    root = _project_call(project_store.get_project_root, req.path)
+    import os as _os
+    _os.startfile(str(root))  # noqa: S606 - opens a folder the user registered, nothing is executed
+    return {"ok": True}
+
+
+# ---- Coding agent (ADR-016) ---------------------------------------------------------
+class AgentDecisionRequest(BaseModel):
+    approval_id: str = Field(max_length=64)
+    approve: bool
+
+
+class AgentUndoRequest(BaseModel):
+    change_ids: list[str] = Field(max_length=200)
+
+
+@app.post("/api/agent/{run_id}/decide")
+async def agent_decide(run_id: str, req: AgentDecisionRequest, request: Request) -> dict[str, Any]:
+    _require_same_app(request)
+    if not agent_mod.decide(run_id, req.approval_id, req.approve):
+        raise HTTPException(status_code=404, detail="That request is no longer waiting.")
+    return {"ok": True}
+
+
+@app.post("/api/agent/{run_id}/stop")
+async def agent_stop(run_id: str, request: Request) -> dict[str, Any]:
+    _require_same_app(request)
+    return {"ok": agent_mod.stop(run_id)}
+
+
+@app.post("/api/agent/undo")
+async def agent_undo(req: AgentUndoRequest, request: Request) -> dict[str, Any]:
+    _require_same_app(request)
+    return {"ok": True, **agent_mod.undo_changes(req.change_ids)}
+
+
+@app.post("/api/agent/preview")
+async def agent_preview(req: ProjectPathRequest, request: Request) -> dict[str, Any]:
+    """Preview a project's index.html (with its local CSS/JS/images folded in) in the sandboxed frame."""
+    _require_same_app(request)
+    html = _project_call(agent_mod.assemble_project_page, req.path)
+    if len(html.encode("utf-8")) > _PREVIEW_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="This page is too large to preview.")
+    import uuid as _uuid
+    pid = _uuid.uuid4().hex
+    _PREVIEWS[pid] = html
+    while len(_PREVIEWS) > 20:
+        _PREVIEWS.pop(next(iter(_PREVIEWS)))
+    return {"id": pid, "url": f"/preview/{pid}"}
 
 
 # ---- Live preview of generated web pages (ADR-015) ---------------------------------

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Loki — Private Local AI</title>
   <link rel="icon" type="image/png" href="/static/loki.png?v=15" />
-  <link rel="stylesheet" href="/static/styles.css?v=32" />
+  <link rel="stylesheet" href="/static/styles.css?v=33" />
 </head>
 <body>
   <div class="app-shell">
@@ -262,6 +262,11 @@
                   </button>
                   <div class="project-menu hidden" id="project-menu" role="menu"></div>
                 </div>
+
+                <label class="composer-chip checkbox-chip agent-chip" title="Agent: with a project attached, or when you ask Loki to build something new, Loki reads and writes the files, runs the code and fixes errors itself. Risky commands still ask you first, and every change can be undone.">
+                  <input type="checkbox" id="chk-agent" checked />
+                  <span>Agent</span>
+                </label>
 
                 <label class="composer-chip checkbox-chip" title="Auto model: code questions use qwen2.5-coder, maths/logic use deepseek-r1, everything else uses the model you picked. Only models that fit your GPU are used.">
                   <input type="checkbox" id="chk-auto-model" checked />
@@ -996,6 +1001,6 @@
     </div>
   </dialog>
 
-  <script src="/static/app.js?v=37"></script>
+  <script src="/static/app.js?v=38"></script>
 </body>
 </html>

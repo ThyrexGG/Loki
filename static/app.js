@@ -23,6 +23,9 @@ const state = {
   isMicListening: false,
   projects: [], // project folders the user added (ADR-012)
   project: (() => { try { return localStorage.getItem("loki.project") || null; } catch (e) { return null; } })(),
+  // Coding agent (ADR-016): on by default, remembered per browser.
+  agentMode: (() => { try { return localStorage.getItem("loki.agent") !== "0"; } catch (e) { return true; } })(),
+  agentRunId: null,
 };
 
 function showToast(msg, action = null) {
@@ -280,6 +283,15 @@ async function saveSettings(partial) {
 const projectMenu = document.getElementById("project-menu");
 const projectBtn = document.getElementById("btn-project");
 
+function diffToHtml(diff) {
+  return (diff || "").split("\n")
+    .filter((l) => !l.startsWith("---") && !l.startsWith("+++"))
+    .map((l) => {
+      const cls = l.startsWith("+") ? "d-add" : l.startsWith("-") ? "d-del" : l.startsWith("@@") ? "d-hunk" : "d-ctx";
+      return `<span class="${cls}">${escapeHtml(l || " ")}</span>`;
+    }).join("");  // each line is already a block element
+}
+
 function setProject(path) {
   state.project = path || null;
   try { path ? localStorage.setItem("loki.project", path) : localStorage.removeItem("loki.project"); } catch (e) { /* ignore */ }
@@ -401,12 +413,7 @@ async function reviewFileChange(project, path, content) {
   warnEl.innerHTML = pv.warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join("");
   warnEl.classList.toggle("hidden", !pv.warnings.length);
   const view = document.getElementById("diff-view");
-  view.innerHTML = pv.diff.split("\n")
-    .filter((l) => !l.startsWith("---") && !l.startsWith("+++"))
-    .map((l) => {
-      const cls = l.startsWith("+") ? "d-add" : l.startsWith("-") ? "d-del" : l.startsWith("@@") ? "d-hunk" : "d-ctx";
-      return `<span class="${cls}">${escapeHtml(l || " ")}</span>`;
-    }).join("");  // each line is already a block element
+  view.innerHTML = diffToHtml(pv.diff);
 
   const applyBtn = document.getElementById("diff-apply");
   applyBtn.classList.toggle("app-dialog-danger", pv.warnings.length > 0);
@@ -492,6 +499,12 @@ async function previewHtml(html) {
   } catch (e) {
     showToast(`Could not open the preview: ${e.message}`);
   }
+}
+function showPreviewUrl(url, title = "Preview") {
+  document.getElementById("preview-frame").src = url;
+  document.getElementById("preview-title").textContent = title;
+  previewDialog.showModal();
+  document.getElementById("preview-close").focus();
 }
 document.getElementById("preview-close").addEventListener("click", () => previewDialog.close());
 document.getElementById("preview-reload").addEventListener("click", () => {
@@ -837,6 +850,16 @@ document.getElementById("chk-web-access").addEventListener("change", async (e) =
   showToast(e.target.checked
     ? "Web access on: Loki will search the web and read links when a question needs it"
     : "Web access off: Loki answers from its local models only");
+});
+
+const agentChk = document.getElementById("chk-agent");
+agentChk.checked = state.agentMode;
+agentChk.addEventListener("change", (e) => {
+  state.agentMode = e.target.checked;
+  try { localStorage.setItem("loki.agent", state.agentMode ? "1" : "0"); } catch (err) { /* ignore */ }
+  showToast(state.agentMode
+    ? "Agent on: with a project attached (or when you ask for something new) Loki writes the files, runs them and fixes errors itself"
+    : "Agent off: Loki answers in chat and proposes changes for you to review");
 });
 
 document.getElementById("chk-auto-model").addEventListener("change", async (e) => {
@@ -1274,10 +1297,14 @@ function renderMessages() {
         wrap.appendChild(details);
       }
 
+      const isLive = state.isStreaming && m === state.messages[state.messages.length - 1];
+      if (m.agent) wrap.appendChild(renderAgentPanel(m, isLive));
+
       const body = document.createElement("div");
       body.className = "msg-body";
-      const isLive = state.isStreaming && m === state.messages[state.messages.length - 1];
-      if (!parts.answer && isLive && !parts.thinking) {
+      if (m.agent && !parts.answer) {
+        body.classList.add("hidden");
+      } else if (!parts.answer && isLive && !parts.thinking) {
         body.innerHTML = `<p class="msg-pending">${escapeHtml(m.webStatus || "Thinking...")}</p>`;
       } else {
         body.innerHTML = renderMarkdown(parts.answer);
@@ -1371,8 +1398,188 @@ function renderMessages() {
   viewport.scrollTop = viewport.scrollHeight;
 }
 
+// ==========================================
+// CODING AGENT (ADR-016): live step list, approvals, undo, preview
+// ==========================================
+const AGENT_ICONS = {
+  running: '<span class="ag-spin" aria-hidden="true"></span>',
+  ok: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg>',
+  error: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><line x1="7" y1="7" x2="17" y2="17"></line><line x1="17" y1="7" x2="7" y2="17"></line></svg>',
+  skipped: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="12" x2="18" y2="12"></line></svg>',
+  waiting: '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><rect x="7" y="6" width="3.2" height="12" rx="1"></rect><rect x="13.8" y="6" width="3.2" height="12" rx="1"></rect></svg>',
+};
+
+function formatSecs(s) {
+  s = Math.round(s || 0);
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+}
+
+function renderAgentPanel(m, isLive) {
+  const a = m.agent;
+  const live = isLive && !a.done;
+  const panel = document.createElement("div");
+  panel.className = "agent-panel";
+  const toolSteps = a.steps.filter((s) => s.kind !== "note");
+  const head = document.createElement("div");
+  head.className = "agent-head";
+  head.innerHTML =
+    `<span class="agent-title">${live ? "Working in" : "Worked in"} <strong>${escapeHtml(a.projectName || "project")}</strong>` +
+    `${a.created ? '<span class="agent-new">New project</span>' : ""}</span>` +
+    (live
+      ? `<span class="agent-timer" data-start="${a.startedAt}" data-label="${escapeHtml(a.status || "Thinking")}">${escapeHtml(a.status || "Thinking")}…</span>`
+      : `<span class="agent-meta">${toolSteps.length} step${toolSteps.length === 1 ? "" : "s"}${a.seconds ? " · " + formatSecs(a.seconds) : ""}</span>`);
+  panel.appendChild(head);
+
+  if (a.steps.length) {
+    const list = document.createElement("ol");
+    list.className = "agent-steps";
+    for (const s of a.steps) {
+      const li = document.createElement("li");
+      if (s.kind === "note") {
+        li.className = "agent-note";
+        li.textContent = s.text;
+        list.appendChild(li);
+        continue;
+      }
+      // A step still running or waiting when the run ended (stopped, or the window was closed) did not happen.
+      const status = (s.status === "running" || s.status === "waiting") && !live ? "skipped" : s.status;
+      li.className = `agent-step st-${status}`;
+      const row = `<span class="ag-icon">${AGENT_ICONS[status] || ""}</span>` +
+        `<span class="ag-title">${escapeHtml(s.title)}</span>` +
+        (s.summary ? `<span class="ag-sum">${escapeHtml(s.summary)}</span>` : "");
+      if (s.diff || s.output) {
+        const det = document.createElement("details");
+        det.open = Boolean(s.open);
+        det.innerHTML = `<summary class="ag-row">${row}</summary>`;
+        const pre = document.createElement("pre");
+        if (s.diff) { pre.className = "ag-detail diff-view"; pre.innerHTML = diffToHtml(s.diff); }
+        else { pre.className = "ag-detail ag-output"; pre.textContent = s.output; }
+        det.appendChild(pre);
+        det.addEventListener("toggle", () => { s.open = det.open; });
+        li.appendChild(det);
+      } else {
+        li.innerHTML = `<div class="ag-row">${row}</div>`;
+      }
+      if (s.status === "waiting" && live) {
+        const box = document.createElement("div");
+        box.className = "ag-approve";
+        box.innerHTML =
+          `<div class="ag-why">Needs your OK: ${escapeHtml((s.reasons || []).join("; "))}</div>` +
+          `<code class="ag-cmd">${escapeHtml(s.command || "")}</code>` +
+          `<div class="ag-btns">` +
+          `<button type="button" class="btn btn-sm btn-primary agent-decide" data-approval="${escapeHtml(s.approvalId)}" data-approve="1">Run it</button>` +
+          `<button type="button" class="btn btn-sm btn-secondary agent-decide" data-approval="${escapeHtml(s.approvalId)}" data-approve="0">Skip</button></div>`;
+        li.appendChild(box);
+      }
+      list.appendChild(li);
+    }
+    panel.appendChild(list);
+  }
+
+  if (a.done) {
+    const bar = document.createElement("div");
+    bar.className = "agent-actions";
+    const changed = [...new Set((a.changes || []).map((c) => c.path))];
+    const sum = document.createElement("span");
+    sum.className = "agent-changed";
+    sum.textContent = a.undone ? "All changes undone"
+      : changed.length ? `Changed ${changed.length} file${changed.length === 1 ? "" : "s"}: ${changed.slice(0, 4).join(", ")}${changed.length > 4 ? "…" : ""}`
+      : "No files changed";
+    bar.appendChild(sum);
+    const btn = (label, cls, action) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `btn btn-sm ${cls} agent-action`;
+      b.dataset.action = action;
+      b.textContent = label;
+      bar.appendChild(b);
+    };
+    if (a.hasIndex && !a.undone) btn("Preview", "btn-primary", "preview");
+    btn("Open folder", "btn-secondary", "open");
+    if (changed.length && !a.undone) btn("Undo all", "btn-secondary", "undo");
+    panel.appendChild(bar);
+  }
+  return panel;
+}
+
+// Live elapsed time on the running agent step ("Working… 14s").
+setInterval(() => {
+  for (const el of document.querySelectorAll(".agent-timer")) {
+    const secs = (Date.now() - Number(el.dataset.start || Date.now())) / 1000;
+    el.textContent = `${el.dataset.label}… ${formatSecs(secs)}`;
+  }
+}, 1000);
+
+function agentMessageFor(el) {
+  const turn = el.closest(".msg");
+  const idx = [...document.querySelectorAll("#chat-stream-column > .msg")].indexOf(turn);
+  return idx >= 0 ? state.messages[idx] : null;
+}
+
+async function saveCurrentChat() {
+  if (!state.saveHistory || !state.chatId) return;
+  try {
+    await fetch(`/api/chats/${encodeURIComponent(state.chatId)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: state.messages }),
+    });
+  } catch (e) { /* the next save will catch up */ }
+}
+
+document.getElementById("chat-stream-column").addEventListener("click", async (e) => {
+  const decideBtn = e.target.closest(".agent-decide");
+  if (decideBtn) {
+    const m = agentMessageFor(decideBtn);
+    if (!m || !m.agent) return;
+    decideBtn.closest(".ag-btns").querySelectorAll("button").forEach((b) => { b.disabled = true; });
+    try {
+      await lokiPost(`/api/agent/${encodeURIComponent(m.agent.runId)}/decide`,
+        { approval_id: decideBtn.dataset.approval, approve: decideBtn.dataset.approve === "1" });
+    } catch (err) { showToast(err.message); }
+    return;
+  }
+  const actionBtn = e.target.closest(".agent-action");
+  if (!actionBtn) return;
+  const m = agentMessageFor(actionBtn);
+  if (!m || !m.agent) return;
+  const a = m.agent;
+  if (actionBtn.dataset.action === "preview") {
+    try {
+      const pv = await lokiPost("/api/agent/preview", { path: a.project });
+      showPreviewUrl(pv.url);
+    } catch (err) { showToast(`Preview failed: ${err.message}`); }
+  } else if (actionBtn.dataset.action === "open") {
+    try { await lokiPost("/api/projects/open", { path: a.project }); }
+    catch (err) { showToast(`Could not open the folder: ${err.message}`); }
+  } else if (actionBtn.dataset.action === "undo") {
+    const ok = await confirmDialog({
+      title: "Undo all changes?",
+      message: `Put back every file this run changed in ${a.projectName} (${a.changes.length} change${a.changes.length === 1 ? "" : "s"}). New files it created are removed.`,
+      confirmLabel: "Undo all", danger: true,
+    });
+    if (!ok) return;
+    try {
+      const res = await lokiPost("/api/agent/undo", { change_ids: a.changes.map((c) => c.id) });
+      if (res.failed && res.failed.length) {
+        showToast(`Undid ${res.undone.length}; ${res.failed.length} could not be undone: ${res.failed[0].error}`);
+      } else {
+        a.undone = true;
+        showToast("All changes undone");
+      }
+      renderMessages();
+      saveCurrentChat();
+    } catch (err) { showToast(`Undo failed: ${err.message}`); }
+  }
+});
+
 // Stop active generation
 document.getElementById("btn-stop-gen").addEventListener("click", async () => {
+  if (state.agentRunId) {
+    // Let the agent finish its current step and report what it changed (so Undo all stays available).
+    try { await lokiPost(`/api/agent/${encodeURIComponent(state.agentRunId)}/stop`, {}); } catch (e) { /* ignore */ }
+    await fetch("/api/chat/stop", { method: "POST" });
+    showToast("Stopping the agent");
+    return;
+  }
   if (state.abortController) {
     state.abortController.abort();
   }
@@ -1445,6 +1652,7 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
         cloud_request_opt_in: false,
         auto_route: state.autoRoute,
         project: state.project || null,
+        agent: state.agentMode,
       }),
       signal: state.abortController.signal,
     });
@@ -1480,6 +1688,48 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
           assistantMsg.projectPath = state.project;
           assistantMsg.projectName = evt.project;
           assistantMsg.projectFiles = evt.files || [];
+          renderMessages();
+        } else if (evt.type === "agent_start") {
+          state.agentRunId = evt.run_id;
+          assistantMsg.projectPath = evt.project;
+          assistantMsg.agent = {
+            runId: evt.run_id, project: evt.project, projectName: evt.project_name, created: evt.created_project,
+            steps: [], status: "Thinking", startedAt: Date.now(), done: false, changes: [],
+          };
+          assistantMsg.model = evt.model;
+          assistantMsg.num_ctx = evt.num_ctx;
+          if (evt.created_project) {
+            await loadProjects();
+            setProject(evt.project);
+            showToast(`Created project folder ${evt.project}`);
+          }
+          renderMessages();
+        } else if (evt.type === "agent_status" && assistantMsg.agent) {
+          assistantMsg.agent.status = evt.text;
+          renderMessages();
+        } else if (evt.type === "agent_note" && assistantMsg.agent) {
+          assistantMsg.agent.steps.push({ kind: "note", text: evt.text });
+          renderMessages();
+        } else if (evt.type === "agent_step" && assistantMsg.agent) {
+          assistantMsg.agent.steps.push({ id: evt.id, tool: evt.tool, title: evt.title, status: "running", command: evt.command || "" });
+          assistantMsg.agent.status = evt.title;
+          renderMessages();
+        } else if (evt.type === "agent_step_update" && assistantMsg.agent) {
+          const s = assistantMsg.agent.steps.find((x) => x.id === evt.id);
+          if (s) {
+            s.status = evt.status;
+            if (evt.summary !== undefined) s.summary = evt.summary;
+            if (evt.diff) s.diff = evt.diff;
+            if (evt.output) s.output = evt.output;
+            if (evt.change_id) s.changeId = evt.change_id;
+            if (evt.approval_id) { s.approvalId = evt.approval_id; s.reasons = evt.reasons || []; }
+            assistantMsg.agent.status = evt.status === "waiting" ? "Waiting for you" : "Working";
+          }
+          renderMessages();
+        } else if (evt.type === "agent_done" && assistantMsg.agent) {
+          Object.assign(assistantMsg.agent, {
+            done: true, changes: evt.changes || [], hasIndex: evt.has_index_html, seconds: evt.seconds,
+          });
           renderMessages();
         } else if (evt.type === "web_status") {
           assistantMsg.webStatus = evt.message;
@@ -1520,6 +1770,14 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
   } finally {
     state.isStreaming = false;
     state.abortController = null;
+    state.agentRunId = null;
+    if (assistantMsg.agent && !assistantMsg.agent.done) {
+      assistantMsg.agent.done = true;
+      assistantMsg.agent.seconds = (Date.now() - assistantMsg.agent.startedAt) / 1000;
+      assistantMsg.agent.changes = assistantMsg.agent.steps.filter((s) => s.changeId)
+        .map((s) => ({ id: s.changeId, path: s.title.replace(/^(Writing|Editing) /, "") }));
+      renderMessages();
+    }
     document.getElementById("btn-send-chat").disabled = false;
     document.getElementById("btn-stop-gen").classList.add("hidden");
 

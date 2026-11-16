@@ -108,11 +108,12 @@ def review(command: str) -> dict[str, Any]:
     return result
 
 
-def _run_blocking(command: str, cwd: str) -> dict[str, Any]:
+def _run_blocking(command: str, cwd: str, prelude: str = "") -> dict[str, Any]:
     # Merge errors into the output as readable text (captured stderr would otherwise be CLIXML), and
-    # turn cmdlet errors into a non-zero exit code.
+    # turn cmdlet errors into a non-zero exit code. `prelude` is trusted setup code from Loki itself
+    # (the coding agent uses it to point `python` at the real interpreter).
     script = (
-        "$ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[Text.Encoding]::UTF8;\n"
+        "$ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[Text.Encoding]::UTF8;\n" + prelude +
         "$__lokiErr = $false; $global:LASTEXITCODE = 0\n"
         "& {\n" + command + "\n} 2>&1 | ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) "
         "{ $__lokiErr = $true; 'ERROR: ' + $_.ToString() } else { $_ } } | Out-String -Width 220\n"
@@ -120,19 +121,28 @@ def _run_blocking(command: str, cwd: str) -> dict[str, Any]:
     )
     encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
     t0 = time.time()
+    # stdin is closed so a program waiting for keyboard input fails at once instead of hanging.
+    proc = subprocess.Popen(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
     try:
-        proc = subprocess.run(
-            ["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
-            capture_output=True, timeout=TIMEOUT_SECONDS, cwd=cwd,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        out = proc.stdout.decode("utf-8", errors="replace")
-        err = proc.stderr.decode("utf-8", errors="replace")
+        out_b, err_b = proc.communicate(timeout=TIMEOUT_SECONDS)
         code, timed_out = proc.returncode, False
-    except subprocess.TimeoutExpired as exc:
-        out = (exc.stdout or b"").decode("utf-8", errors="replace")
-        err = (exc.stderr or b"").decode("utf-8", errors="replace")
+    except subprocess.TimeoutExpired:
+        # Kill the whole tree: killing only powershell.exe leaves children (e.g. a web server the command
+        # started) holding the output pipes open, and Loki then waited forever (measured 2026-11-16).
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        try:
+            out_b, err_b = proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            out_b, err_b = b"", b""
         code, timed_out = None, True
+    out = (out_b or b"").decode("utf-8", errors="replace")
+    err = (err_b or b"").decode("utf-8", errors="replace")
     # Strip PowerShell's CLIXML progress noise from stderr.
     err = re.sub(r"#< CLIXML\s*<Objs.*?</Objs>", "", err, flags=re.S).strip()
     text = out.rstrip() + (("\n" if out.strip() else "") + err if err else "")
@@ -141,14 +151,14 @@ def _run_blocking(command: str, cwd: str) -> dict[str, Any]:
             "output": text[:MAX_OUTPUT_CHARS] + ("\n... (output cut)" if truncated else ""), "truncated": truncated}
 
 
-async def run(command: str, token: str, cwd: str | None = None) -> dict[str, Any]:
+async def run(command: str, token: str, cwd: str | None = None, prelude: str = "") -> dict[str, Any]:
     verdict = assess(command)
     if verdict["level"] in ("blocked", "admin"):
         raise PermissionError("Loki will not run this command. Copy it and run it yourself if you are sure.")
     if not token or not hmac.compare_digest(token, _token(command)):
         raise PermissionError("This command was not reviewed (or changed after review). Review it again.")
     workdir = cwd if cwd and Path(cwd).is_dir() else str(Path.home())
-    result = await asyncio.to_thread(_run_blocking, command, workdir)
+    result = await asyncio.to_thread(_run_blocking, command, workdir, prelude)
     entry = {"id": f"cmd-{int(time.time())}-{uuid.uuid4().hex[:6]}", "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
              "command": command, "level": verdict["level"], "cwd": workdir, "exit_code": result["exit_code"],
              "timed_out": result["timed_out"], "duration_s": result["duration_s"], "output_preview": result["output"][:2000]}

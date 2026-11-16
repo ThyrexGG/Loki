@@ -27,7 +27,7 @@ import httpx
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REAL_DATA = REPO_ROOT / "data"
-ALL_SUITES = [f"m{i}" for i in range(1, 9)]
+ALL_SUITES = [f"m{i}" for i in range(1, 10)]
 
 
 def free_port() -> int:
@@ -80,7 +80,8 @@ def main(argv: list[str]) -> int:
     url = f"http://127.0.0.1:{port}"
     before = fingerprint(REAL_DATA)
 
-    env = {**os.environ, "LOKI_DATA_DIR": str(data_dir), "PYTHONUTF8": "1", "LOKI_WEB_ACCESS": "0"}
+    env = {**os.environ, "LOKI_DATA_DIR": str(data_dir), "PYTHONUTF8": "1", "LOKI_WEB_ACCESS": "0",
+           "LOKI_PROJECTS_DIR": str(data_dir.parent / "projects")}
     server_log = open(logs_dir / "server.log", "w", encoding="utf-8")
     server = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(port)],

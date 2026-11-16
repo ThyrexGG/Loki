@@ -101,6 +101,13 @@ flowchart TD
 * `POST /api/preview {html}` (requires `X-Loki-Request: 1`) -> `{id, url}`; `GET /preview/{id}` -> the page with the restrictive preview CSP (see ADR-015). Previews live in memory only (last 20).
 * UI: ```html code blocks get Preview (dialog with an iframe, no sandbox attribute; isolation via the CSP header) and Download (Blob, file name from `<title>`).
 
+### 2.2i Coding Agent (`app/agent.py` — ADR-016)
+* `/api/chat/stream` hands the message to `agent.run_agent()` when `agent: true` and (a project is attached, or the message asks to build something new: a folder is created under `LOKI_PROJECTS_DIR`, default `D:\LokiProjects`).
+* Loop: `qwen2.5:7b` at 16k context with Ollama `tools` -> parse tool calls (native, or JSON in the text) -> run the tool -> append the result -> repeat (max 24 steps). Holds the single-inference lock for the whole run; Stop sets the abort flag between steps.
+* Stream events: `agent_start`, `agent_status`, `agent_step` / `agent_step_update` (status running/ok/error/waiting/skipped, diff, output, approval id), `agent_note`, `agent_done` (changes, has_index_html), then the usual `token` / `done`.
+* Endpoints (all require `X-Loki-Request`): `POST /api/agent/{run}/decide`, `/api/agent/{run}/stop`, `/api/agent/undo`, `/api/agent/preview` (project `index.html` with local CSS/JS/images inlined, served via `/preview/{id}`), `/api/projects/open`.
+* Files go through `projects.resolve_inside` / `preview_change` / `apply_change` (same guards, backups and undo as reviewed edits). Commands go through `commands.run` with a prelude that maps `python`/`pip` to the real interpreter.
+
 ### 2.3 Workflow Engine (`app/workflows.py` — Stage 2)
 * Represents each workflow as an inspectable sequence of typed steps:
   * **Deterministic Steps**: Execute narrowly scoped Python functions (e.g., reading hardware counters, parsing a selected log tail, querying indexed chunks, validating schema).

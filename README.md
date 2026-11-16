@@ -23,6 +23,10 @@ The repository documentation is the shared source of truth across coding session
   * Streams answers with explicit model/provider attribution (`LOCAL • ollama / gemma2:9b • ctx 4096`), token counts, and `tok/s`.
   * Enforces a foreground single-inference lock (`asyncio.Lock`) so only one model generation runs at a time on your 8 GB GPU.
   * Includes immediate **Stop Generation** and **Unload Model (Free VRAM)** (`keep_alive: 0`) controls.
+* **Coding Agent (`app/agent.py`)**:
+  * With **Agent** on (composer switch, on by default) and a project attached, or when you ask Loki to build something new, Loki does the work itself instead of only printing code: it reads the project, writes and edits files, runs the code or tests, reads the errors and fixes them, then summarises. New projects get their own folder under `D:\LokiProjects` (attached automatically).
+  * Every step shows live under the reply (files read, diffs of each change, command output). Safe steps run by themselves; installs, deletions, git history changes, downloads and paths outside the project wait for **Run it / Skip**. Servers and admin commands are never run. **Undo all** puts every file back; **Preview** opens a project's `index.html`; **Open folder** shows it in Explorer.
+  * Uses `qwen2.5:7b` (benchmarked best for tool use on 8 GB, see ADR-016). Small local models still make mistakes: when the code's own checks fail at the end, Loki says so plainly and shows the error.
 * **Build Websites and Small Apps**:
   * Ask for a website, landing page, small app or browser game: Loki (Qwen 2.5 Coder) writes one self-contained HTML file. **Preview** runs it inside Loki in a sandbox (its own code runs, but it cannot reach the internet, your files or Loki); **Download** saves it as an `.html` file.
 * **PC Help (`app/commands.py`)**:
@@ -191,7 +195,7 @@ You can remove all stored Loki data at any time without affecting your PC or you
 ## 8. Running the Verification Tests
 
 ```powershell
-& "$env:LOCALAPPDATA\Python\bin\python.exe" tests\run_tests.py         # all 8 suites
+& "$env:LOCALAPPDATA\Python\bin\python.exe" tests\run_tests.py         # all 9 suites
 & "$env:LOCALAPPDATA\Python\bin\python.exe" tests\run_tests.py m3 m8   # selected suites
 ```
 

@@ -1,6 +1,6 @@
 # Loki — Project State
 
-*Last Updated: 2026-11-16 (through Task 31)*
+*Last Updated: 2026-11-16 (through Task 32)*
 
 ## 1. Current Milestone & Status
 
@@ -15,6 +15,7 @@
   * **Stage 6 (Task 6.1)** — Three-Switch Cloud Provider Gateway Adapters & Outbound Activity/Cost Visibility Ledger (`app/cloud_gateway.py`).
   * **Stage 7 (Task 7.1)** — Explicit Opt-In Scheduled Workflow Automation & Foreground-Priority Resource Guardrails (`app/scheduler.py`).
   * **Stage 8 (Task 8.1 & Model Upgrade)** — Upgraded local model to **`gemma2:9b`** (`9.2B` parameters, `5.4 GB`), implemented the **Natural-Language Job-to-Workflow Planner** (`app/project_tools.py`), and added three domain workflows (`game_dev_project_audit`, `folder_organization_plan`, `content_publishing_kit`).
+  * **Task 32 (Coding Agent)** - Agent switch: Loki works in the project folder itself (read, write, run, fix), smart-auto approvals, Undo all (ADR-016).
   * **Task 31 (Build & Preview)** - Website/app requests use the coder model; HTML answers get sandboxed Preview and Download (ADR-015).
   * **Task 30 (Model Menu Sections)** - Coloured section headings, dividers and speed dots.
   * **Task 29 (PC Help)** - Reviewed PowerShell commands: Run button, risk rating (read / change / admin / blocked), never elevated, 60 s limit, logged; troubleshooting route to qwen2.5:7b (`app/commands.py`, ADR-014).
@@ -30,7 +31,7 @@
   * **Task 18 (Repo, Tests, Multi-Chat)** - Git repo initialised; verify_m1-m8 re-run; saved chats list in sidebar with open/rename/delete (`/api/chats`).
   * **Task 14 (Brand)** - Serpent logo/icon (two-headed S serpent) across icon, favicon, sidebar, chat avatar, and welcome screen.
   * **Task 13 (Desktop App)** — Edge app-mode desktop app (`desktop/Loki.ps1`), Desktop + Start Menu shortcuts, Loki icon/favicon (ADR-008).
-* **Current Stage**: All 8 platform stages plus Tasks 12-29 complete and verified (`tests/run_tests.py`: 8/8 pass). Loki now also searches the web, helps with code in project folders, looks at the screen on request, and runs reviewed PowerShell commands. Version label in code is still `v0.8.0`.
+* **Current Stage**: All 8 platform stages plus Tasks 12-29 complete and verified (`tests/run_tests.py`: 9/9 pass). Loki now also searches the web, helps with code in project folders, looks at the screen on request, and runs reviewed PowerShell commands. Version label in code is still `v0.8.0`.
 
 ---
 
@@ -96,7 +97,7 @@
 14. **Coding in Project Folders (`app/projects.py`)**: project context in chat; `file:` change proposals -> diff review -> apply with backup -> undo; secrets and dependency folders never read.
 15. **Screen Help (`app/screen.py`)**: one screenshot on request to the local vision model; never saved.
 16. **PC Help (`app/commands.py`)**: Run button on PowerShell blocks; risk-rated review; runs only after the user confirms; logged.
-17. **Automated Verification (`tests/verify_m1.py` through `tests/verify_m8.py`, run via `tests/run_tests.py`)**:
+17. **Automated Verification (`tests/verify_m1.py` through `tests/verify_m9.py`, run via `tests/run_tests.py`)**:
     * `tests/run_tests.py` runs them against an isolated server with a throwaway data folder (`LOKI_DATA_DIR`), so the real `data/` is never touched; the scripts refuse to run directly.
     * All eight verification suites pass end-to-end against live local Ollama (`gemma2:9b` and `llama3:latest`).
 
@@ -141,7 +142,7 @@
 * PC help (reviewed PowerShell): `app/commands.py`
 * Frontend UI: `static/index.html`, `static/styles.css`, `static/app.js`
 * Persistent Data Folder: `data/` (`settings.json`, `conversations.json`, `workflow_runs.json`, `pending_approvals.json`, `memories.json`, `activity_ledger.json`, `schedules.json`, `index.db`, `exports/`, `project_changes.json`, `backups/`, `command_log.json`)
-* Verification: `tests/run_tests.py` (isolated runner) + `tests/verify_m1.py` … `tests/verify_m8.py`, guard in `tests/_isolated.py`
+* Verification: `tests/run_tests.py` (isolated runner) + `tests/verify_m1.py` … `tests/verify_m9.py`, guard in `tests/_isolated.py`
 
 ---
 

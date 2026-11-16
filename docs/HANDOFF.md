@@ -1,6 +1,6 @@
 # Loki — Model-to-Model Handoff Brief
 
-*Last Updated: 2026-11-16 (Task 31: build-and-preview for generated web pages, ADR-015)*
+*Last Updated: 2026-11-16 (Task 32: coding agent, ADR-016)*
 
 > **AGENT CONTINUATION INSTRUCTION (MANDATORY)**
 > Before editing any code in this repository, every AI agent or coding session MUST:
@@ -41,6 +41,7 @@ Loki is a private, local-first personal assistant and workflow automation platfo
   * **Tasks 12–17 (2026-11-15)**: Default model reset to `gemma2:9b` + docs consistency; desktop app (`desktop/Loki.ps1`, Edge `--app` window, Desktop/Start Menu shortcuts, ADR-008); serpent logo/icon (`desktop/make_icon.py`); own taskbar identity `Loki.LocalAI` (`desktop/LokiShell.cs`); content-hashed icon path to beat the Windows icon cache.
   * **Task 18 (2026-11-16)**: Git repository initialised (`main`; personal `data/*`, Edge profile and logs ignored); `verify_m1`–`m8` re-run with `data/` backed up and restored (all 8 pass after fixing stale paths in m3/m4/m8; run them with the GPU free — a full-screen game causes timeouts); multi-chat history (sidebar **Chats** list, `/api/chats` API, conversations.json v2 with legacy migration).
   * **Task 20 (2026-11-16)**: VRAM-aware model ratings and default selection (`app/model_fit.py`, ADR-009); grouped model picker with warnings.
+  * **Task 32 (2026-11-16)**: Coding agent - Loki reads, writes, runs and fixes code itself in project folders (smart auto approvals, Undo all, new projects in `D:\LokiProjects`, `qwen2.5:7b`; ADR-016).
   * **Task 31 (2026-11-16)**: Build-and-preview - website requests go to the coder model, Preview/Download on HTML blocks, sandboxed `/preview/{id}` (ADR-015).
   * **Task 30 (2026-11-16)**: Clearer model menu sections (coloured headings, dividers, speed dots).
   * **Task 29 (2026-11-16)**: PC Help - Reviewed PowerShell commands: Run button, risk rating (read / change / admin / blocked), never elevated, 60 s limit, logged; troubleshooting route to qwen2.5:7b (`app/commands.py`, ADR-014).
