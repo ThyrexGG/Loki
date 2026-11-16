@@ -106,6 +106,7 @@ flowchart TD
 * Loop: `qwen2.5:7b` at 16k context with Ollama `tools` -> parse tool calls (native, or JSON in the text) -> run the tool -> append the result -> repeat (max 24 steps). Holds the single-inference lock for the whole run; Stop sets the abort flag between steps.
 * Stream events: `agent_start`, `agent_status`, `agent_step` / `agent_step_update` (status running/ok/error/waiting/skipped, diff, output, approval id), `agent_note`, `agent_done` (changes, has_index_html), then the usual `token` / `done`.
 * Endpoints (all require `X-Loki-Request`): `POST /api/agent/{run}/decide`, `/api/agent/{run}/stop`, `/api/agent/undo`, `/api/agent/preview` (project `index.html` with local CSS/JS/images inlined, served via `/preview/{id}`), `/api/projects/open`.
+* Whole files arrive as ```` ```file:path ```` blocks in the reply (`extract_file_blocks`); tools are only for small actions. New website projects are seeded from `app/web_starter/` (designed CSS/JS + GUIDE.md outline, per-project palette). Raw replies are logged to `data/agent_runs/` (last 20 runs).
 * Files go through `projects.resolve_inside` / `preview_change` / `apply_change` (same guards, backups and undo as reviewed edits). Commands go through `commands.run` with a prelude that maps `python`/`pip` to the real interpreter.
 
 ### 2.3 Workflow Engine (`app/workflows.py` — Stage 2)

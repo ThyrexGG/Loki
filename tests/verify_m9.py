@@ -81,6 +81,19 @@ def main() -> int:
     (hp / "index.html").write_text("<html><head><style>h1{}</style></head><body><h1>Rollcall</h1>"
                                    "<p>Take attendance in seconds.</p></body></html>", encoding="utf-8")
     check("page check: clean page passes", agent._site_issues(hp) == [], str(agent._site_issues(hp)))
+    blocks = agent.extract_file_blocks('Saved.\n```file:index.html\n<p class="a">"q"</p>\n```\n```html file:style.css\nb{}\n```\n'
+                                       '```file:run_command\nx\n```\n```python\nprint(1)\n```')
+    check("file blocks parsed (quotes intact, tool-name blocks and plain code ignored)",
+          [(b["arguments"]["path"], b["arguments"]["content"]) for b in blocks] == [("index.html", '<p class="a">"q"</p>\n'), ("style.css", "b{}\n")], str(blocks))
+    check("write_file is not offered as a tool (long files broke Ollama's parser)",
+          "write_file" not in [t["function"]["name"] for t in agent.OFFERED_TOOLS])
+    check("starter design present", all((agent.STARTER_DIR / f).is_file() for f in ("style.css", "script.js", "GUIDE.md")))
+    css = (agent.STARTER_DIR / "style.css").read_text(encoding="utf-8")
+    check("palettes differ per project", agent._apply_palette(css, "coffee-shop") != agent._apply_palette(css, "portfolio-site-2")
+          or agent._apply_palette(css, "coffee-shop") != agent._apply_palette(css, "dog-walker"))
+    check("starter outline words count as placeholders", bool(agent._PLACEHOLDER_TEXT.search("Site name - Card title")))
+    check("website requests use the starter", bool(agent._WEB_INTENT.search("generate a cool website with proper styling"))
+          and not agent._WEB_INTENT.search("make a python script with tests"))
     check("agent defaults to the benchmarked model", agent.AGENT_MODELS[0] == "qwen2.5:7b" or bool(os.environ.get("LOKI_AGENT_MODEL")))
 
     print("[4] File tools and guards")

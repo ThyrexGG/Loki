@@ -1,6 +1,6 @@
 # Loki — Project State
 
-*Last Updated: 2026-11-16 (through Task 32)*
+*Last Updated: 2026-11-16 (through Task 33)*
 
 ## 1. Current Milestone & Status
 
@@ -15,6 +15,7 @@
   * **Stage 6 (Task 6.1)** — Three-Switch Cloud Provider Gateway Adapters & Outbound Activity/Cost Visibility Ledger (`app/cloud_gateway.py`).
   * **Stage 7 (Task 7.1)** — Explicit Opt-In Scheduled Workflow Automation & Foreground-Priority Resource Guardrails (`app/scheduler.py`).
   * **Stage 8 (Task 8.1 & Model Upgrade)** — Upgraded local model to **`gemma2:9b`** (`9.2B` parameters, `5.4 GB`), implemented the **Natural-Language Job-to-Workflow Planner** (`app/project_tools.py`), and added three domain workflows (`game_dev_project_audit`, `folder_organization_plan`, `content_publishing_kit`).
+  * **Task 33 (Agent Websites)** - File blocks instead of tool arguments, designed web starter, stricter checks.
   * **Task 32 (Coding Agent)** - Agent switch: Loki works in the project folder itself (read, write, run, fix), smart-auto approvals, Undo all (ADR-016).
   * **Task 31 (Build & Preview)** - Website/app requests use the coder model; HTML answers get sandboxed Preview and Download (ADR-015).
   * **Task 30 (Model Menu Sections)** - Coloured section headings, dividers and speed dots.
