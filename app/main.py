@@ -726,6 +726,23 @@ async def capture_screen(req: ScreenCaptureRequest) -> dict[str, Any]:
     return {**shot, "vision_model": screen_capture.VISION_MODEL, "vision_ready": screen_capture.VISION_MODEL in names}
 
 
+@app.post("/api/screen/clipboard")
+async def paste_clipboard_image(request: Request) -> dict[str, Any]:
+    """Read an image or copied image file from the local Windows clipboard on explicit Ctrl+V paste."""
+    _require_same_app(request)
+    shot = await screen_capture.grab_clipboard()
+    if not shot:
+        return {"ok": False, "has_image": False}
+    names = [m["name"] for m in (await ollama_service.get_status()).get("installed_models", [])]
+    return {
+        "ok": True,
+        "has_image": True,
+        **shot,
+        "vision_model": screen_capture.VISION_MODEL,
+        "vision_ready": screen_capture.VISION_MODEL in names,
+    }
+
+
 @app.get("/api/diagnostics/processes")
 async def get_top_processes_endpoint(limit: int = 10) -> dict[str, Any]:
     """Return read-only top processes snapshot."""

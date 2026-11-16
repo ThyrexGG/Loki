@@ -1,6 +1,6 @@
 # Loki — Model-to-Model Handoff Brief
 
-*Last Updated: 2026-11-16 (Task 34: gentle test runner)*
+*Last Updated: 2026-11-16 (Task 35: image paste, drag & drop, and file attach)*
 
 > **AGENT CONTINUATION INSTRUCTION (MANDATORY)**
 > Before editing any code in this repository, every AI agent or coding session MUST:
@@ -41,6 +41,7 @@ Loki is a private, local-first personal assistant and workflow automation platfo
   * **Tasks 12–17 (2026-11-15)**: Default model reset to `gemma2:9b` + docs consistency; desktop app (`desktop/Loki.ps1`, Edge `--app` window, Desktop/Start Menu shortcuts, ADR-008); serpent logo/icon (`desktop/make_icon.py`); own taskbar identity `Loki.LocalAI` (`desktop/LokiShell.cs`); content-hashed icon path to beat the Windows icon cache.
   * **Task 18 (2026-11-16)**: Git repository initialised (`main`; personal `data/*`, Edge profile and logs ignored); `verify_m1`–`m8` re-run with `data/` backed up and restored (all 8 pass after fixing stale paths in m3/m4/m8; run them with the GPU free — a full-screen game causes timeouts); multi-chat history (sidebar **Chats** list, `/api/chats` API, conversations.json v2 with legacy migration).
   * **Task 20 (2026-11-16)**: VRAM-aware model ratings and default selection (`app/model_fit.py`, ADR-009); grouped model picker with warnings.
+  * **Task 35 (2026-11-16)**: Image paste (`Ctrl+V` from `Win+Shift+S` snip, browser copy, or Windows File Explorer copied file via `/api/screen/clipboard`), drag-and-drop image support, and an **Attach image** button in the chat composer (`app/screen.py`, `static/app.js`).
   * **Task 34 (2026-11-16)**: Gentle test runner - waits for free RAM/VRAM, one model at a time, low priority (`--fast` for full speed). Ask the user before running model suites.
   * **Task 33 (2026-11-16)**: Agent website fix - files via ```` ```file: ```` blocks (long tool arguments broke Ollama's parser), designed web starter for new sites, stricter test checks, `data/agent_runs/` reply log.
   * **Task 32 (2026-11-16)**: Coding agent - Loki reads, writes, runs and fixes code itself in project folders (smart auto approvals, Undo all, new projects in `D:\LokiProjects`, `qwen2.5:7b`; ADR-016).

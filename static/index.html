@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Loki — Private Local AI</title>
   <link rel="icon" type="image/png" href="/static/loki.png?v=15" />
-  <link rel="stylesheet" href="/static/styles.css?v=33" />
+  <link rel="stylesheet" href="/static/styles.css?v=34" />
 </head>
 <body>
   <div class="app-shell">
@@ -219,19 +219,19 @@
 
           <form class="chat-composer" id="chat-form">
             <div class="screen-attachment hidden" id="screen-attachment">
-              <img id="screen-thumb" alt="Screenshot to send" />
+              <img id="screen-thumb" alt="Image to send" />
               <div class="screen-attachment-text">
-                <strong>Screenshot attached</strong>
-                <span>Sent only to the local vision model. Not saved.</span>
+                <strong id="screen-attachment-title">Screenshot attached</strong>
+                <span id="screen-attachment-sub">Sent only to the local vision model. Not saved.</span>
               </div>
-              <button type="button" class="pm-remove" id="btn-remove-screenshot" title="Remove screenshot" aria-label="Remove screenshot">
+              <button type="button" class="pm-remove" id="btn-remove-screenshot" title="Remove attached image" aria-label="Remove attached image">
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line></svg>
               </button>
             </div>
             <textarea
               id="chat-input"
               rows="1"
-              placeholder="Message Loki..."
+              placeholder="Message Loki... (Paste or drop an image anytime)"
             ></textarea>
 
             <div class="composer-toolbar">
@@ -288,6 +288,14 @@
               <div class="composer-buttons">
                 <button type="button" id="btn-stop-tts" class="btn-ghost-pill hidden" title="Stop local voice playback">
                   Stop voice
+                </button>
+                <input type="file" id="input-attach-image" accept="image/*" class="visually-hidden" tabindex="-1" />
+                <button type="button" id="btn-attach-image" class="btn-composer-mic" title="Attach an image file (or paste with Ctrl+V / drag and drop)" aria-label="Attach an image">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <polyline points="21 15 16 10 5 21"></polyline>
+                  </svg>
                 </button>
                 <button type="button" id="btn-screen" class="btn-composer-mic" title="Look at my screen: takes one screenshot after 3 seconds so you can switch windows" aria-label="Look at my screen">
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1001,6 +1009,6 @@
     </div>
   </dialog>
 
-  <script src="/static/app.js?v=38"></script>
+  <script src="/static/app.js?v=39"></script>
 </body>
 </html>

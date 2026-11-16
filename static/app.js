@@ -623,15 +623,169 @@ function showCommandResult(command, res) {
 cmdDialog.addEventListener("click", (e) => { if (e.target === cmdDialog) cmdDialog.close(); });
 
 // ==========================================
-// SCREEN HELP: one screenshot on request, sent only to the local vision model (ADR-013)
+// SCREEN & IMAGE HELP: screenshot capture, Ctrl+V paste, drag & drop, and file attach (ADR-013)
 // ==========================================
 function clearScreenshot() {
   state.pendingScreenshot = null;
+  state.pendingImageKind = null;
   document.getElementById("screen-attachment").classList.add("hidden");
   document.getElementById("screen-thumb").removeAttribute("src");
 }
 
+function setPendingImage(base64Jpeg, titleText = "Image attached", kind = "image") {
+  state.pendingScreenshot = base64Jpeg;
+  state.pendingImageKind = kind;
+  const titleEl = document.getElementById("screen-attachment-title");
+  if (titleEl) titleEl.textContent = titleText;
+  document.getElementById("screen-thumb").src = `data:image/jpeg;base64,${base64Jpeg}`;
+  document.getElementById("screen-attachment").classList.remove("hidden");
+}
+
+function attachImageBlob(fileOrBlob, label = "Image attached") {
+  if (state.isStreaming) {
+    showToast("Wait for the current reply to finish before attaching an image");
+    return;
+  }
+  if (!fileOrBlob) return;
+  const mime = (fileOrBlob.type || "").toLowerCase();
+  const name = (fileOrBlob.name || "").toLowerCase();
+  const isImage = mime.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(name);
+  if (!isImage) {
+    showToast("Please paste or attach an image file (PNG, JPG, WebP, GIF, or BMP)");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onerror = () => showToast("Could not read that image");
+  reader.onload = () => {
+    const img = new Image();
+    img.onerror = () => showToast("Could not decode that image");
+    img.onload = () => {
+      const maxDim = 1280;
+      let w = img.naturalWidth || img.width || 1;
+      let h = img.naturalHeight || img.height || 1;
+      if (w > maxDim || h > maxDim) {
+        const scale = Math.min(maxDim / w, maxDim / h);
+        w = Math.max(1, Math.round(w * scale));
+        h = Math.max(1, Math.round(h * scale));
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.86);
+      const b64 = (dataUrl.split(",")[1] || "").trim();
+      if (!b64) {
+        showToast("Could not encode that image");
+        return;
+      }
+      setPendingImage(b64, label, "image");
+      showToast(`${label}. Ask your question, or press Send.`);
+      if (typeof chatInputEl !== "undefined" && chatInputEl) chatInputEl.focus();
+    };
+    img.src = String(reader.result || "");
+  };
+  reader.readAsDataURL(fileOrBlob);
+}
+
 document.getElementById("btn-remove-screenshot").addEventListener("click", clearScreenshot);
+
+const inputAttachImage = document.getElementById("input-attach-image");
+const btnAttachImage = document.getElementById("btn-attach-image");
+if (btnAttachImage && inputAttachImage) {
+  btnAttachImage.addEventListener("click", () => {
+    if (state.isStreaming) return;
+    inputAttachImage.click();
+  });
+  inputAttachImage.addEventListener("change", () => {
+    const file = inputAttachImage.files && inputAttachImage.files[0];
+    if (file) attachImageBlob(file, file.name ? `Image attached (${file.name})` : "Image attached");
+    inputAttachImage.value = "";
+  });
+}
+
+// Paste image from clipboard anywhere on the Chat screen (Ctrl+V / Win+Shift+S snip / Explorer copied image file)
+document.addEventListener("paste", async (e) => {
+  const chatTab = document.getElementById("tab-chat");
+  if (!chatTab || !chatTab.classList.contains("active")) return;
+  if (document.querySelector("dialog[open]")) return;
+  const cd = e.clipboardData;
+  let imgBlob = null;
+  if (cd && cd.items) {
+    for (const item of cd.items) {
+      if (item.kind === "file" && (item.type || "").toLowerCase().startsWith("image/")) {
+        imgBlob = item.getAsFile();
+        if (imgBlob) break;
+      }
+    }
+  }
+  if (!imgBlob && cd && cd.files && cd.files.length) {
+    for (const f of cd.files) {
+      if ((f.type || "").toLowerCase().startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name || "")) {
+        imgBlob = f;
+        break;
+      }
+    }
+  }
+  if (imgBlob) {
+    e.preventDefault();
+    attachImageBlob(imgBlob, "Image pasted from clipboard");
+    return;
+  }
+  // If no plain text was pasted (e.g. user copied an image file in Windows File Explorer), check OS clipboard
+  const plainText = cd ? cd.getData("text/plain") : "";
+  if (!plainText) {
+    try {
+      const resp = await fetch("/api/screen/clipboard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Loki-Request": "1" },
+      });
+      const data = await resp.json();
+      if (resp.ok && data.has_image && data.image_b64) {
+        setPendingImage(data.image_b64, data.label || "Image pasted from clipboard", "image");
+        showToast(`${data.label || "Image pasted"}. Ask your question, or press Send.`);
+        if (typeof chatInputEl !== "undefined" && chatInputEl) chatInputEl.focus();
+      }
+    } catch (_) {
+      // ignore if clipboard has no image
+    }
+  }
+}, true);
+
+// Drag & drop image onto the chat tab / composer
+const chatTabDropZone = document.getElementById("tab-chat");
+const chatComposerForm = document.getElementById("chat-form");
+if (chatTabDropZone && chatComposerForm) {
+  let dragDepth = 0;
+  chatTabDropZone.addEventListener("dragenter", (e) => {
+    if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files")) {
+      dragDepth += 1;
+      chatComposerForm.classList.add("drag-over");
+    }
+  });
+  chatTabDropZone.addEventListener("dragover", (e) => {
+    if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    }
+  });
+  chatTabDropZone.addEventListener("dragleave", () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) chatComposerForm.classList.remove("drag-over");
+  });
+  chatTabDropZone.addEventListener("drop", (e) => {
+    dragDepth = 0;
+    chatComposerForm.classList.remove("drag-over");
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (!files || !files.length) return;
+    e.preventDefault();
+    const file = files[0];
+    attachImageBlob(file, file.name ? `Image attached (${file.name})` : "Image attached");
+  });
+}
+
 document.getElementById("btn-screen").addEventListener("click", async () => {
   if (state.isStreaming) return;
   const btn = document.getElementById("btn-screen");
@@ -645,9 +799,7 @@ document.getElementById("btn-screen").addEventListener("click", async () => {
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.detail || "capture failed");
-    state.pendingScreenshot = data.image_b64;
-    document.getElementById("screen-thumb").src = `data:image/jpeg;base64,${data.image_b64}`;
-    document.getElementById("screen-attachment").classList.remove("hidden");
+    setPendingImage(data.image_b64, "Screenshot attached", "screenshot");
     showToast(data.vision_ready
       ? "Screenshot ready. Ask your question, or just press Send."
       : "Screenshot ready, but the vision model is still downloading. Try again in a few minutes.");
@@ -1601,7 +1753,10 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
   if (state.isStreaming) return;
 
   const shot = state.pendingScreenshot;
-  const text = chatInputEl.value.trim() || (shot ? "What's on my screen? Explain it and help me with what I'm doing." : "");
+  const defaultImgPrompt = state.pendingImageKind === "screenshot"
+    ? "What's on my screen? Explain it and help me with what I'm doing."
+    : "What is in this image? Explain it and help me with what it shows.";
+  const text = chatInputEl.value.trim() || (shot ? defaultImgPrompt : "");
   if (!text) return;
   clearScreenshot();
 

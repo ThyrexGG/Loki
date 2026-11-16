@@ -600,3 +600,19 @@ Append a concise entry after each completed task or meaningful implementation st
 * **Problem**: a full-speed test run right after the agent benchmarks made the user's PC lag and crash (RAM near full with Chrome, Discord, Steam and Medal open). "Why can't it be like slowly and not flood the resource?"
 * **Change**: `tests/run_tests.py` is gentle by default: waits for >= 4 GB free RAM and >= 5 GB free GPU memory before each AI suite (prints why it is waiting; never unloads models while waiting, since they may be the user's own chat), unloads models and pauses 8 s after each AI suite, runs the server and suites at below-normal priority, and sets `LOKI_OLLAMA_THREADS` (CPU threads / 4) and `LOKI_OLLAMA_KEEP_ALIVE=30s` for the isolated server (`ollama_service.apply_gentle`, a no-op in normal use). `--fast` keeps the old behaviour; Ctrl+C stops cleanly. A run that stops early now returns failure.
 * **Checks**: memory readings (4.0 GB RAM / 6.7 GB VRAM free at the time), the wait loop holds while the PC is "busy" (forced threshold), `apply_gentle` adds `num_thread` / `keep_alive` only when set, `run_tests.py m9` passes. Full gentle run afterwards (user's go-ahead): it first waited while only 2.5-3.0 GB RAM was free, started once memory was freed, then **9/9 suites passed** (about 6 minutes of suites), real data untouched, no model left loaded. This also covers the Task 33 changes whose earlier full run had timed out under load.
+
+---
+
+## 2026-11-16 - Task 35: Image Paste (`Ctrl+V`), Drag-and-Drop & File Attachment in Chat
+
+* **Goal**: Fix the inability to paste (`Ctrl+V`), drag-and-drop, or attach images directly in the Chat composer.
+* **Files Changed**:
+  * `app/screen.py` - Added `_encode_pil_image` (with RGBA transparency compositing onto white and max-1280px proportional scaling) and `grab_clipboard()` (`PIL.ImageGrab.grabclipboard()` supporting both clipboard bitmaps and copied image files from Windows File Explorer).
+  * `app/main.py` - Added `POST /api/screen/clipboard` (protected by `_require_same_app`).
+  * `static/index.html` - Added `#btn-attach-image` + hidden `#input-attach-image` file picker in `.composer-buttons`, `#screen-attachment-title` inside `#screen-attachment`, updated `#chat-input` placeholder, and bumped cache-busting to `styles.css?v=34` and `app.js?v=39`.
+  * `static/app.js` - Added `attachImageBlob()` (client-side `<canvas>` resize to max 1280px JPEG), capture-phase `paste` listener on `document` (reading `e.clipboardData.items` / `e.clipboardData.files` first and falling back to `POST /api/screen/clipboard` when copying an image file in Windows Explorer), `dragenter`/`dragover`/`dragleave`/`drop` handlers on `#tab-chat`, and `#btn-attach-image` click handler.
+  * `static/styles.css` - Added `.chat-composer.drag-over` highlight and `#btn-attach-image:disabled`.
+* **Checks**:
+  1. Restarted Uvicorn server on `127.0.0.1:8420` (also activating Task 33's `agent.py` changes).
+  2. Verified `GET /` serves `btn-attach-image` and `app.js?v=39`.
+  3. Verified `POST /api/screen/clipboard` with `X-Loki-Request: 1` returns `{"ok":false,"has_image":false}` when clipboard has no image, and verified `_encode_pil_image` scales a `2000x1000` RGBA image to `1280x640` JPEG (`5,087 B`).
