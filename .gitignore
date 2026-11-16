@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+
+# Personal runtime data (chats, memories, index, ledgers, settings, exports) stays local only.
+# Sample fixtures used by the workflows/tests are tracked.
+data/*
+!data/sample_messy_tasks.csv
+!data/sample_system.log
+
+# Desktop app runtime: Edge profile, server logs, content-hashed icon copies
+desktop/profile/
+desktop/server.log*
+desktop/icons/
+
+
+# Local-only: Claude Code preview config and logo design references/drafts
+.claude/
+desktop/reference/

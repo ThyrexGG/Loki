@@ -1,0 +1,7 @@
+2026-11-15 13:55:01 [INFO] [SystemBoot] Workstation startup complete. Usable RAM: 15.23 GB.
+2026-11-15 13:56:12 [INFO] [GPUDriver] NVIDIA GeForce RTX 5050 Laptop GPU initialized (8151 MiB VRAM, Driver 610.71).
+2026-11-15 13:58:44 [WARN] [BackgroundIndexer] SearchIndexer.exe high disk read latency (412 ms) on C:\Users\User\AppData.
+2026-11-15 14:01:09 [ERROR] [AudioService] USB Audio Endpoint timeout after 3000ms (ErrorCode: 0x800705B4) — retrying connection.
+2026-11-15 14:02:15 [WARN] [MemoryGuard] Browser tab pool allocated 3,420 MB across 28 renderer processes.
+2026-11-15 14:04:30 [INFO] [OllamaDaemon] Listening on 127.0.0.1:11434 (v0.40.13). Model llama3:latest ready.
+2026-11-15 14:05:00 [ERROR] [UpdaterTask] ThirdPartyHelper.exe failed to connect to update server (timeout after 5000ms); scheduled retry in 60s.

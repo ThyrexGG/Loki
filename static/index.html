@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loki — Private Local AI</title>
+  <link rel="icon" type="image/png" href="/static/loki.png?v=15" />
+  <link rel="stylesheet" href="/static/styles.css?v=32" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Left Navigation Rail (Claude / ChatGPT inspired) -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <div class="brand">
+          <div class="brand-mark">
+            <img src="/static/loki-mark.svg?v=15" width="30" height="30" alt="" />
+          </div>
+          <div class="brand-text">
+            <h1>Loki</h1>
+            <span class="brand-sub">Private AI assistant</span>
+          </div>
+        </div>
+
+        <button id="btn-clear-chat" class="new-chat-btn" title="Start a fresh local conversation">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>New chat</span>
+        </button>
+      </div>
+
+      <div class="nav-section-label">Workspace</div>
+      <nav class="nav-list">
+        <button class="nav-btn active" data-tab="chat">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span>Chat</span>
+        </button>
+        <button class="nav-btn" data-tab="docs">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+          </svg>
+          <span>Documents</span>
+        </button>
+        <button class="nav-btn" data-tab="analyst">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+          <span>Workflows</span>
+        </button>
+        <button class="nav-btn" data-tab="status">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+          <span>System</span>
+        </button>
+        <button class="nav-btn" data-tab="privacy">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          <span>Privacy</span>
+        </button>
+      </nav>
+
+      <div class="nav-section-label">Chats</div>
+      <div class="chat-list" id="chat-list" aria-label="Saved chats"></div>
+
+      <!-- Bottom Ambient Telemetry Pod -->
+      <div class="sidebar-footer">
+        <div class="sidebar-telemetry">
+          <div class="telemetry-header">
+            <span>RTX 5050 &bull; Local Machine</span>
+            <button id="btn-refresh-status" class="btn-icon" title="Refresh" aria-label="Refresh"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"></path><polyline points="21 3 21 9 15 9"></polyline></svg></button>
+          </div>
+          <div class="mini-metric">
+            <div class="mini-metric-label">
+              <span>CPU</span>
+              <span id="mini-cpu-val">--%</span>
+            </div>
+            <div class="progress-track"><div id="mini-cpu-bar" class="progress-fill" style="width:0%"></div></div>
+          </div>
+          <div class="mini-metric">
+            <div class="mini-metric-label">
+              <span>RAM</span>
+              <span id="mini-ram-val">-- / -- GB</span>
+            </div>
+            <div class="progress-track"><div id="mini-ram-bar" class="progress-fill" style="width:0%"></div></div>
+          </div>
+          <div class="mini-metric">
+            <div class="mini-metric-label">
+              <span>VRAM</span>
+              <span id="mini-vram-val">-- / -- MiB</span>
+            </div>
+            <div class="progress-track"><div id="mini-vram-bar" class="progress-fill progress-gpu" style="width:0%"></div></div>
+          </div>
+          <div class="vram-model-box" id="sidebar-vram-box">
+            <span id="sidebar-vram-status">VRAM idle</span>
+          </div>
+        </div>
+
+        <div class="privacy-pill" id="sidebar-privacy-pill" title="Click to inspect privacy & stored data">
+          <span class="dot dot-green"></span>
+          <div class="privacy-pill-text">
+            <strong>Private by default</strong>
+            <small id="privacy-pill-detail">AI runs on this PC</small>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Canvas -->
+    <div class="main-area">
+      <!-- Sleek Floating Header Bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <div class="model-picker" id="model-picker">
+            <button type="button" class="model-picker-btn" id="model-picker-btn"
+                    aria-haspopup="listbox" aria-expanded="false" aria-controls="model-picker-menu">
+              <span class="model-pill-dot" id="model-picker-dot"></span>
+              <span class="model-picker-name" id="model-picker-name">Choose a model</span>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <div class="model-picker-menu hidden" id="model-picker-menu" role="listbox" aria-label="Model" tabindex="-1"></div>
+            <!-- Hidden source of truth: existing code reads/sets its value and listens for "change". -->
+            <select id="select-model" class="visually-hidden" aria-hidden="true" tabindex="-1">
+              <option value="gemma2:9b">gemma2:9b</option>
+            </select>
+          </div>
+
+          <div class="status-indicator" id="ollama-conn-badge" title="Ollama connection">
+            <span class="dot" id="ollama-conn-dot"></span>
+            <span id="ollama-conn-text">Checking Ollama...</span>
+          </div>
+          <button id="btn-start-ollama" class="btn btn-sm btn-secondary hidden">Start Local Ollama</button>
+        </div>
+
+        <div class="topbar-right">
+          <button id="btn-unload-model" class="btn-ghost-pill" title="Free GPU memory (unload the model)">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+              <line x1="12" y1="2" x2="12" y2="12"></line>
+            </svg>
+            <span>Free VRAM</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- TAB 1: FLUID CHAT EXPERIENCE (ChatGPT + Claude + Gemini Hybrid) -->
+      <section class="tab-panel active" id="tab-chat">
+        <div class="chat-scroll-viewport" id="chat-messages">
+          <!-- Gemini / Claude Style Hero Greeting when Chat is Empty -->
+          <div class="empty-state" id="chat-empty-state">
+            <img class="hero-logo" src="/static/loki-logo.svg?v=15" width="88" height="88" alt="Loki serpent logo" />
+            <div class="hero-badge">
+              <span class="dot dot-green"></span>
+              <span>Running <strong id="chat-banner-model">gemma2:9b</strong> on this PC</span>
+            </div>
+            <h2 class="hero-title">What can I help with?</h2>
+            <p class="hero-subtitle">
+              Ask anything. Loki runs on this PC and looks things up online when a question needs current information.
+            </p>
+
+            <div class="quick-prompts">
+              <button class="quick-prompt-card quick-prompt-btn" data-prompt="What are the most important technology news stories this week?">
+                <div class="qp-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"></path></svg></div>
+                <div class="qp-text">
+                  <strong>Catch up on the news</strong>
+                  <span>Searches the web and cites its sources</span>
+                </div>
+              </button>
+              <button class="quick-prompt-card quick-prompt-btn" data-prompt="Summarize this page in five bullet points: ">
+                <div class="qp-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"></path><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"></path></svg></div>
+                <div class="qp-text">
+                  <strong>Summarize a link</strong>
+                  <span>Paste any article or page after the prompt</span>
+                </div>
+              </button>
+              <button class="quick-prompt-card quick-prompt-btn" data-prompt="Write a Python function that safely reads the last N lines of a large log file without loading it all into memory.">
+                <div class="qp-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="8 7 3 12 8 17"></polyline><polyline points="16 7 21 12 16 17"></polyline></svg></div>
+                <div class="qp-text">
+                  <strong>Write code</strong>
+                  <span>Python, JavaScript, PowerShell and more</span>
+                </div>
+              </button>
+              <button class="quick-prompt-card quick-prompt-btn" data-prompt="A laptop costs $1,299. It is 15% off and then 7% tax is added. What is the final price? Show the steps.">
+                <div class="qp-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19h16"></path><path d="M7 15l4-4 3 3 5-6"></path></svg></div>
+                <div class="qp-text">
+                  <strong>Solve step by step</strong>
+                  <span>Maths and logic, with the reasoning shown</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Centered Stream Column where messages render -->
+          <div class="chat-stream-column" id="chat-stream-column"></div>
+        </div>
+
+        <!-- Floating Omni-Composer Dock -->
+        <div class="composer-dock-wrapper">
+          <!-- Prominent Active-Microphone Banner (Strictly Push-to-Talk) -->
+          <div id="mic-active-banner" class="mic-active-banner hidden">
+            <div class="mic-banner-left">
+              <span class="mic-pulse-dot"></span>
+              <span><strong>MIC ACTIVE (Push-to-Talk)</strong> &mdash; Listening for 1 utterance locally via Windows System.Speech (Never continuous &bull; Never uploaded)</span>
+            </div>
+            <button type="button" id="btn-stop-mic" class="btn btn-sm btn-danger">Stop Mic</button>
+          </div>
+
+          <form class="chat-composer" id="chat-form">
+            <div class="screen-attachment hidden" id="screen-attachment">
+              <img id="screen-thumb" alt="Screenshot to send" />
+              <div class="screen-attachment-text">
+                <strong>Screenshot attached</strong>
+                <span>Sent only to the local vision model. Not saved.</span>
+              </div>
+              <button type="button" class="pm-remove" id="btn-remove-screenshot" title="Remove screenshot" aria-label="Remove screenshot">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line></svg>
+              </button>
+            </div>
+            <textarea
+              id="chat-input"
+              rows="1"
+              placeholder="Message Loki..."
+            ></textarea>
+
+            <div class="composer-toolbar">
+              <div class="composer-pills">
+                <label class="composer-chip" title="Context window in tokens (4096 recommended for 8 GB VRAM)">
+                  <span>Ctx</span>
+                  <select id="select-ctx">
+                    <option value="2048">2k</option>
+                    <option value="4096" selected>4k</option>
+                    <option value="8192">8k</option>
+                  </select>
+                </label>
+
+                <label class="composer-chip" title="Sampling temperature">
+                  <span>Temp</span>
+                  <select id="select-temp">
+                    <option value="0.1">0.1</option>
+                    <option value="0.3" selected>0.3</option>
+                    <option value="0.7">0.7</option>
+                  </select>
+                </label>
+
+                <div class="project-chip-wrap">
+                  <button type="button" class="composer-chip project-chip" id="btn-project" aria-haspopup="menu" aria-expanded="false"
+                          title="Attach a project folder so Loki can read your code and propose changes">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                    <span id="project-chip-label">No project</span>
+                  </button>
+                  <div class="project-menu hidden" id="project-menu" role="menu"></div>
+                </div>
+
+                <label class="composer-chip checkbox-chip" title="Auto model: code questions use qwen2.5-coder, maths/logic use deepseek-r1, everything else uses the model you picked. Only models that fit your GPU are used.">
+                  <input type="checkbox" id="chk-auto-model" checked />
+                  <span>Auto model</span>
+                </label>
+
+                <label class="composer-chip checkbox-chip" title="When unchecked, chat is ephemeral and not written to disk">
+                  <input type="checkbox" id="chk-save-history" checked />
+                  <span>Save History</span>
+                </label>
+
+                <label class="composer-chip checkbox-chip" title="Include your approved Personal/Project Memories in chat">
+                  <input type="checkbox" id="chk-use-memories" checked />
+                  <span id="composer-mem-label">Memories (0)</span>
+                </label>
+
+              </div>
+
+              <div class="composer-buttons">
+                <button type="button" id="btn-stop-tts" class="btn-ghost-pill hidden" title="Stop local voice playback">
+                  Stop voice
+                </button>
+                <button type="button" id="btn-screen" class="btn-composer-mic" title="Look at my screen: takes one screenshot after 3 seconds so you can switch windows" aria-label="Look at my screen">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2" y="4" width="20" height="13" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line>
+                  </svg>
+                </button>
+                <button type="button" id="btn-ptt-mic" class="btn-composer-mic" title="Local Push-to-Talk (Single utterance via Windows System.Speech — never continuous)">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                  </svg>
+                </button>
+                <button type="button" id="btn-stop-gen" class="btn-composer-stop hidden" title="Stop generation">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+                  </svg>
+                  <span>Stop</span>
+                </button>
+                <button type="submit" id="btn-send-chat" class="btn-composer-send" title="Send message (Enter)">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5"></line>
+                    <polyline points="5 12 12 5 19 12"></polyline>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </form>
+          <div class="composer-footnote">
+            <span id="composer-footnote-text">AI runs on this PC. Only web search text leaves it.</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: HEALTH & STATUS -->
+      <section class="tab-panel" id="tab-status">
+        <div class="panel-scroll">
+          <div class="section-header">
+            <div>
+              <h2>System</h2>
+              <p>Live processor, memory and graphics usage, and the AI models installed on this PC.</p>
+            </div>
+            <button id="btn-manual-refresh" class="btn btn-secondary">Refresh</button>
+          </div>
+
+          <div class="cards-grid">
+            <div class="card">
+              <h3>AI engine</h3>
+              <div class="kv-list">
+                <div class="kv-row"><span>Status</span> <strong id="st-ollama-state">--</strong></div>
+                <div class="kv-row"><span>Endpoint</span> <code id="st-ollama-url">http://127.0.0.1:11434</code></div>
+                <div class="kv-row"><span>Version</span> <span id="st-ollama-ver">--</span></div>
+                <div class="kv-row"><span>Active Model</span> <strong id="st-selected-model">--</strong></div>
+                <div class="kv-row"><span>Context Window</span> <span id="st-ctx-len">--</span></div>
+                <div class="kv-row"><span>Loaded in VRAM</span> <strong id="st-vram-models">None</strong></div>
+              </div>
+              <div class="card-footer">
+                <span class="collector-note">Source: <code>GET 127.0.0.1:11434/api/tags</code> &amp; <code>/api/ps</code></span>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Processor</h3>
+              <div class="metric-big" id="st-cpu-percent">--%</div>
+              <div class="progress-track lg"><div id="st-cpu-bar" class="progress-fill" style="width:0%"></div></div>
+              <div class="kv-list">
+                <div class="kv-row"><span>Processor</span> <span id="st-cpu-name">AMD Ryzen 7 H 260</span></div>
+                <div class="kv-row"><span>Access Mode</span> <span>Read-Only Counter</span></div>
+              </div>
+              <div class="card-footer">
+                <span class="collector-note" id="st-cpu-collector">Collector: Win32 kernel32.GetSystemTimes</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Memory</h3>
+              <div class="metric-big" id="st-ram-summary">-- / -- GB</div>
+              <div class="progress-track lg"><div id="st-ram-bar" class="progress-fill" style="width:0%"></div></div>
+              <div class="kv-list">
+                <div class="kv-row"><span>Utilization</span> <span id="st-ram-percent">--%</span></div>
+                <div class="kv-row"><span>Free RAM</span> <span id="st-ram-avail">-- GB</span></div>
+              </div>
+              <div class="card-footer">
+                <span class="collector-note" id="st-ram-collector">Collector: Win32 kernel32.GlobalMemoryStatusEx</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Graphics card</h3>
+              <div class="metric-big" id="st-gpu-vram">-- / -- MiB</div>
+              <div class="progress-track lg"><div id="st-gpu-vram-bar" class="progress-fill progress-gpu" style="width:0%"></div></div>
+              <div class="kv-list">
+                <div class="kv-row"><span>GPU</span> <span id="st-gpu-name">NVIDIA GeForce RTX 5050 Laptop GPU</span></div>
+                <div class="kv-row"><span>Core Load</span> <strong id="st-gpu-util">--%</strong></div>
+                <div class="kv-row"><span>Temperature</span> <span id="st-gpu-temp">-- &deg;C</span></div>
+                <div class="kv-row"><span>Free VRAM</span> <span id="st-gpu-free">-- MiB</span></div>
+              </div>
+              <div class="card-footer">
+                <span class="collector-note" id="st-gpu-collector">Collector: nvidia-smi --query-gpu (read-only)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mt-16">
+            <h3>Installed models</h3>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Model Name</th>
+                  <th>Family</th>
+                  <th>Parameters</th>
+                  <th>Quantization</th>
+                  <th>Disk Size</th>
+                  <th>State</th>
+                </tr>
+              </thead>
+              <tbody id="models-table-body">
+                <tr><td colspan="6">Loading models...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: PC ANALYST & WORKFLOWS -->
+      <section class="tab-panel" id="tab-analyst">
+        <div class="panel-scroll">
+          <div class="section-header">
+            <div>
+              <h2>Workflows</h2>
+              <p>Multi-step jobs that gather information, ask the AI, and wait for your approval before saving anything.</p>
+            </div>
+            <div class="chat-actions">
+              <button id="btn-refresh-procs" class="btn btn-secondary">Refresh processes</button>
+              <button id="btn-clear-wf-history" class="btn btn-danger">Clear history</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Describe a job</h3>
+            <p class="text-muted mt-8">
+              Describe what you want Loki to do (e.g., <em>"Scan my game project folder and draft a build report"</em>, <em>"Organize files in a folder and save a plan"</em>, <em>"Draft a YouTube video publishing kit"</em>, or <em>"Clean my messy CSV spreadsheet"</em>). Loki will map it to an inspectable workflow and pre-fill the inputs below.
+            </p>
+            <div class="input-row mt-12">
+              <input
+                type="text"
+                id="wf-nl-prompt-input"
+                placeholder="Describe your task in plain language..."
+              />
+              <button type="button" id="btn-plan-workflow" class="btn btn-primary">
+                Plan job
+              </button>
+            </div>
+            <div id="wf-planner-reason" class="collector-note hidden mt-8"></div>
+          </div>
+
+          <div class="card mt-16">
+            <div class="flex-between">
+              <h3>Top processes by memory</h3>
+              <span class="collector-note" id="procs-collector-note">Collector: PowerShell Get-Process (read-only)</span>
+            </div>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Process Name</th>
+                  <th>PID</th>
+                  <th>Working Set RAM (MB)</th>
+                  <th>CPU Time (s)</th>
+                </tr>
+              </thead>
+              <tbody id="procs-table-body">
+                <tr><td colspan="4">Click Refresh Processes or open tab to load snapshot...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="cards-grid mt-16">
+            <div class="card">
+              <h3>1. Choose a workflow</h3>
+              <label class="form-field">
+                <span>Workflow Template</span>
+                <select id="wf-select"></select>
+              </label>
+              <p class="text-muted mt-8" id="wf-desc"></p>
+
+              <div class="kv-list mt-8">
+                <div class="kv-row"><span>Trigger</span> <code id="wf-trigger">manual</code></div>
+                <div class="kv-row"><span>Permissions</span> <span class="tag-locked" id="wf-perm">Read-only</span></div>
+                <div class="kv-row"><span>Approval Points</span> <span id="wf-approvals">--</span></div>
+              </div>
+
+              <div class="mt-12">
+                <strong class="sub-heading">Allowed Data Sources</strong>
+                <ul class="compact-list" id="wf-sources"></ul>
+              </div>
+
+              <div class="mt-12">
+                <strong class="sub-heading">Ordered Steps (Deterministic vs. Local AI)</strong>
+                <ol class="compact-list" id="wf-steps-blueprint"></ol>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>2. Set inputs and run</h3>
+              <div class="form-stack">
+                <label class="form-field">
+                  <span>Source File Path (<code>.log</code>, <code>.txt</code>, or <code>.csv</code>)</span>
+                  <div class="input-row">
+                    <input
+                      type="text"
+                      id="wf-input-log-path"
+                      placeholder="Path to .log/.txt or .csv file (or click Sample Log / Sample CSV)"
+                    />
+                    <button type="button" id="btn-use-sample-log" class="btn btn-sm btn-secondary" title="Create and fill a sample log in loki/data/sample_system.log">
+                      Sample Log
+                    </button>
+                    <button type="button" id="btn-use-sample-csv" class="btn btn-sm btn-secondary" title="Create and fill a sample messy CSV in loki/data/sample_messy_tasks.csv">
+                      Sample CSV
+                    </button>
+                    <button type="button" id="btn-preview-log" class="btn btn-sm btn-secondary">
+                      Preview
+                    </button>
+                  </div>
+                </label>
+
+                <div id="log-preview-box" class="code-preview hidden"></div>
+
+                <label class="checkbox-label" id="wf-row-win-events">
+                  <input type="checkbox" id="wf-input-win-events" />
+                  <span>Include recent Windows Application/System Warning &amp; Error events (Read-Only <code>Get-WinEvent</code>)</span>
+                </label>
+
+                <label class="form-field">
+                  <span>Focus Question / Research Topic</span>
+                  <input
+                    type="text"
+                    id="wf-input-focus"
+                    placeholder="e.g., Explain top memory consumers and any WARN/ERROR lines."
+                  />
+                </label>
+
+                <div class="wf-controls-bar">
+                  <button type="button" id="btn-run-workflow" class="btn btn-primary">
+                    &#9654; Run Workflow (Local)
+                  </button>
+                  <button type="button" id="btn-pause-workflow" class="btn btn-warning hidden">
+                    Pause
+                  </button>
+                  <button type="button" id="btn-cancel-workflow" class="btn btn-danger hidden">
+                    &#9632; Cancel Run
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mt-16" id="wf-active-run-card">
+            <div class="flex-between">
+              <h3 id="wf-active-title">Workflow Execution &amp; Step Inspector</h3>
+              <span id="wf-active-badge" class="status-pill st-pending">IDLE</span>
+            </div>
+            <div id="wf-active-body" class="mt-8">
+              <p class="text-muted">No workflow run selected yet. Start a manual run above or click a run in history below.</p>
+            </div>
+          </div>
+
+          <div class="card mt-16">
+            <h3>Run history</h3>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Run ID</th>
+                  <th>Workflow</th>
+                  <th>Started</th>
+                  <th>Status</th>
+                  <th>Model / Tools</th>
+                  <th>Data Left PC?</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="wf-history-body">
+                <tr><td colspan="7">No workflow runs recorded yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card mt-16">
+            <div class="flex-between">
+              <div>
+                <h3>Schedules</h3>
+                <p class="text-muted">
+                  Off by default. Scheduled runs automatically yield to foreground chat (<code>inference_lock</code>) and skip if your 8 GB GPU or CPU (&gt;92%) is busy.
+                </p>
+              </div>
+              <div class="chat-actions">
+                <span id="sch-global-badge" class="tag-locked">Off</span>
+                <button type="button" id="btn-toggle-sch-global" class="btn btn-sm btn-secondary">
+                  Enable Scheduled Automation
+                </button>
+              </div>
+            </div>
+
+            <div class="kv-list mt-12">
+              <div class="kv-row">
+                <span>Foreground-Priority Guardrail Status</span>
+                <code id="sch-guardrail-status">Idle &amp; within 16 GB RAM / 8 GB VRAM guardrails</code>
+              </div>
+            </div>
+
+            <div class="input-row mt-12">
+              <input type="text" id="sch-title-input" placeholder="Schedule title (e.g., Hourly PC Health Audit)" style="max-width:260px" />
+              <select id="sch-workflow-select" style="max-width:260px">
+                <option value="pc_health_audit">PC Resource &amp; Log Diagnostic Report (Read-Only)</option>
+                <option value="folder_research_digest">Folder Research Digest (Read-Only)</option>
+                <option value="log_file_explainer">Selected Log File Summarizer (Read-Only)</option>
+              </select>
+              <select id="sch-interval-select" style="width:150px;flex:none">
+                <option value="15">Every 15 min</option>
+                <option value="30">Every 30 min</option>
+                <option value="60" selected>Every 60 min</option>
+                <option value="240">Every 4 hours</option>
+              </select>
+              <button type="button" id="btn-create-schedule" class="btn btn-primary">Add Schedule</button>
+            </div>
+
+            <table class="data-table mt-12">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Title</th>
+                  <th>Workflow</th>
+                  <th>Interval</th>
+                  <th>State</th>
+                  <th>Runs / Skipped</th>
+                  <th>Last Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="schedules-table-body">
+                <tr><td colspan="8">No scheduled workflows configured.</td></tr>
+              </tbody>
+            </table>
+
+            <div class="mt-12">
+              <strong class="sub-heading">Scheduler Audit Log (Triggers, Guardrail Deferrals &amp; Toggles)</strong>
+              <table class="data-table mt-8">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Schedule</th>
+                    <th>Event</th>
+                    <th>Run ID</th>
+                    <th>Detail</th>
+                  </tr>
+                </thead>
+                <tbody id="schedule-events-body">
+                  <tr><td colspan="5">No scheduler events recorded yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: DOCUMENT Q&A -->
+      <section class="tab-panel" id="tab-docs">
+        <div class="panel-scroll">
+          <div class="section-header">
+            <div>
+              <h2>Documents</h2>
+              <p>Ask questions about folders you choose. Answers cite the exact file and lines. Nothing is uploaded.</p>
+            </div>
+            <div class="chat-actions">
+              <button id="btn-toggle-pause-docs" class="btn btn-warning">Pause access</button>
+              <button id="btn-reindex-docs" class="btn btn-secondary">Re-index</button>
+              <button id="btn-clear-docs-index" class="btn btn-danger">Clear index</button>
+            </div>
+          </div>
+
+          <div class="cards-grid">
+            <div class="card">
+              <div class="flex-between">
+                <h3>1. Folders</h3>
+                <span id="docs-pause-badge" class="status-pill st-completed">Active</span>
+              </div>
+              <p class="text-muted mt-8">
+                Loki only indexes folders you explicitly add below (<code>.md</code>, <code>.txt</code>, <code>.py</code>, <code>.json</code>, <code>.csv</code>, <code>.log</code>, <code>.html</code>, <code>.ps1</code>).
+              </p>
+
+              <div class="form-stack mt-8">
+                <div class="input-row">
+                  <input
+                    type="text"
+                    id="docs-folder-input"
+                    placeholder="Enter folder path to index (e.g., C:\Users\you\Documents\Notes)"
+                  />
+                  <button type="button" id="btn-add-docs-folder" class="btn btn-primary">
+                    Add folder
+                  </button>
+                  <button
+                    type="button"
+                    id="btn-add-sample-docs"
+                    class="btn btn-secondary"
+                    title="Index Loki's own docs/ folder to test cited Q&A immediately"
+                  >
+                    Add Loki docs
+                  </button>
+                </div>
+              </div>
+
+              <div class="kv-list mt-12">
+                <div class="kv-row"><span>Approved Folders</span> <strong id="docs-folder-count">0</strong></div>
+                <div class="kv-row"><span>Indexed Files</span> <strong id="docs-file-count">0</strong></div>
+                <div class="kv-row"><span>Indexed Chunks</span> <strong id="docs-chunk-count">0</strong></div>
+                <div class="kv-row"><span>Local Index File</span> <code id="docs-db-path">loki/data/index.db</code></div>
+              </div>
+
+              <div class="mt-12">
+                <strong class="sub-heading">Currently Approved Folders</strong>
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Folder Path</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="docs-folders-tbody">
+                    <tr><td colspan="2">No folders added yet.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>2. Ask a question</h3>
+              <p class="text-muted mt-8">
+                Answers cite exact file names and line numbers (e.g., <code>[ARCHITECTURE.md:L1-L30]</code>).
+              </p>
+              <div class="form-stack mt-8">
+                <label class="form-field">
+                  <span>Your Question or Keyword Query</span>
+                  <input
+                    type="text"
+                    id="docs-question-input"
+                    placeholder="e.g., How does the Cloud Provider Gate work and what files are stored in loki/data/?"
+                  />
+                </label>
+                <div class="wf-controls-bar">
+                  <button type="button" id="btn-ask-docs" class="btn btn-primary">
+                    Ask
+                  </button>
+                  <button type="button" id="btn-search-docs-only" class="btn btn-secondary">
+                    Search only
+                  </button>
+                </div>
+              </div>
+
+              <div id="docs-answer-container" class="mt-12">
+                <p class="text-muted">Index a folder and ask a question above to see cited answers and retrieved passages.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mt-16">
+            <h3>Indexed files</h3>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>File Name</th>
+                  <th>Relative Path</th>
+                  <th>Root Folder</th>
+                  <th>Size</th>
+                  <th>Chunks</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="docs-files-tbody">
+                <tr><td colspan="6">No files indexed yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: PRIVACY & DATA -->
+      <section class="tab-panel" id="tab-privacy">
+        <div class="panel-scroll">
+          <div class="section-header">
+            <div>
+              <h2>Privacy</h2>
+              <p>What leaves this PC, what Loki stores, and how to remove it.</p>
+            </div>
+            <button id="btn-wipe-data" class="btn btn-danger">Wipe all data</button>
+          </div>
+
+          <div class="cards-grid">
+            <div class="card">
+              <h3>Connections</h3>
+              <div class="kv-list">
+                <div class="kv-row"><span>Loki server</span> <code>127.0.0.1:8420</code></div>
+                <div class="kv-row"><span>AI engine (Ollama)</span> <code id="priv-ollama-url">http://127.0.0.1:11434</code></div>
+                <div class="kv-row"><span>App page network access</span> <span>This app only</span></div>
+                <div class="kv-row"><span>Telemetry</span> <span>None</span></div>
+                <div class="kv-row">
+                  <span>Web search and links<small class="kv-sub" id="web-access-note">DuckDuckGo. Only the search text or link leaves this PC.</small></span>
+                  <label class="switch" title="When on, Loki searches the web and reads pasted links automatically. Searches go to DuckDuckGo; your chats, files and memories stay on this PC.">
+                    <input type="checkbox" id="chk-web-access" checked />
+                    <span id="web-access-state">On</span>
+                  </label>
+                </div>
+                <div class="kv-row"><span>Changes to your files</span> <span>Never without your approval</span></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="flex-between">
+                <h3>Cloud AI providers</h3>
+                <button type="button" id="btn-toggle-cloud-global" class="btn btn-sm btn-secondary">
+                  Allow cloud AI
+                </button>
+              </div>
+              <p class="text-muted">
+                Off. To use one, allow cloud AI, enable the provider, and set its API key as a Windows environment variable. Keys are never saved by Loki.
+              </p>
+              <div class="kv-list" id="cloud-gate-kv-list">
+                <div class="kv-row">
+                  <span>Cloud AI</span>
+                  <span id="cg-global-badge" class="tag-locked">Off</span>
+                </div>
+                <div class="kv-row">
+                  <span>ChatGPT (<code>OPENAI_API_KEY</code>)</span>
+                  <span>
+                    <small id="cg-env-openai" class="text-muted" style="margin-right:8px">No key</small>
+                    <button type="button" class="btn btn-sm btn-secondary btn-toggle-cloud-prov" data-prov="openai" id="cg-btn-openai">Disabled</button>
+                  </span>
+                </div>
+                <div class="kv-row">
+                  <span>Claude (<code>ANTHROPIC_API_KEY</code>)</span>
+                  <span>
+                    <small id="cg-env-anthropic" class="text-muted" style="margin-right:8px">No key</small>
+                    <button type="button" class="btn btn-sm btn-secondary btn-toggle-cloud-prov" data-prov="anthropic" id="cg-btn-anthropic">Disabled</button>
+                  </span>
+                </div>
+                <div class="kv-row">
+                  <span>Gemini (<code>GEMINI_API_KEY</code>)</span>
+                  <span>
+                    <small id="cg-env-gemini" class="text-muted" style="margin-right:8px">No key</small>
+                    <button type="button" class="btn btn-sm btn-secondary btn-toggle-cloud-prov" data-prov="gemini" id="cg-btn-gemini">Disabled</button>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mt-16">
+            <div class="flex-between">
+              <div>
+                <h3>Activity log</h3>
+                <p class="text-muted">Every AI request and web lookup, and whether any data left this PC.</p>
+              </div>
+              <button type="button" id="btn-clear-ledger" class="btn btn-sm btn-secondary">Clear log</button>
+            </div>
+
+            <div class="kv-list mt-12" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
+              <div class="kv-row"><span>Local AI requests</span> <strong id="led-local-count" class="text-green">0</strong></div>
+              <div class="kv-row"><span>Blocked cloud requests</span> <strong id="led-blocked-count">0</strong></div>
+              <div class="kv-row"><span>Cloud AI requests</span> <strong id="led-cloud-count">0</strong></div>
+              <div class="kv-row"><span>Web lookups</span> <strong id="led-web-count">0</strong></div>
+              <div class="kv-row"><span>Data sent out</span> <code id="led-ext-bytes">0 B</code></div>
+              <div class="kv-row"><span>Cloud cost</span> <code id="led-est-cost">$0.000000</code></div>
+            </div>
+
+            <table class="data-table mt-12">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Kind</th>
+                  <th>Provider / Model</th>
+                  <th>Status</th>
+                  <th>Tokens (In/Out)</th>
+                  <th>Data Left PC?</th>
+                  <th>Est. Cost</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody id="activity-ledger-body">
+                <tr><td colspan="8">No gateway activity recorded yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card mt-16">
+            <div class="flex-between">
+              <div>
+                <h3>Memories</h3>
+                <p class="text-muted">Choose exactly what Loki remembers across chats. Toggle or remove any entry anytime.</p>
+              </div>
+              <button type="button" id="btn-clear-memories" class="btn btn-sm btn-danger">Clear All Memories</button>
+            </div>
+
+            <div class="input-row mt-12">
+              <select id="mem-category-select" style="width:140px;flex:none">
+                <option value="personal">Personal</option>
+                <option value="project">Project</option>
+                <option value="preference">Preference</option>
+                <option value="workflow">Workflow</option>
+              </select>
+              <input type="text" id="mem-title-input" placeholder="Short title (e.g., Main GPU Spec)" style="max-width:240px" />
+              <input type="text" id="mem-content-input" placeholder="What should Loki remember? (e.g., I use an RTX 5050 Laptop GPU with 8 GB VRAM)" />
+              <button type="button" id="btn-add-memory" class="btn btn-primary">Save Memory</button>
+            </div>
+
+            <table class="data-table mt-12">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Title</th>
+                  <th>Memory Content</th>
+                  <th>Active in Chat?</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="memories-table-body">
+                <tr><td colspan="5">No personal or project memories saved yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card mt-16">
+            <h3>Stored files <code id="priv-data-dir" class="h3-path">data/</code></h3>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>File Name</th>
+                  <th>Relative Path</th>
+                  <th>Full Path</th>
+                  <th>Size (Bytes)</th>
+                </tr>
+              </thead>
+              <tbody id="privacy-files-body">
+                <tr><td colspan="4">Inspecting data directory...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- In-app dialog (replaces the browser's native confirm/prompt pop-ups) -->
+  <dialog id="app-dialog" class="app-dialog" aria-labelledby="app-dialog-title" aria-describedby="app-dialog-message">
+    <form method="dialog" class="app-dialog-form" id="app-dialog-form">
+      <h2 id="app-dialog-title" class="app-dialog-title"></h2>
+      <p id="app-dialog-message" class="app-dialog-message"></p>
+      <label class="app-dialog-field hidden" id="app-dialog-field">
+        <span id="app-dialog-label" class="app-dialog-label"></span>
+        <input id="app-dialog-input" type="text" autocomplete="off" spellcheck="false" />
+      </label>
+      <div class="app-dialog-actions">
+        <!-- Cancel is type="button" so Enter (implicit submission) always means OK, never Cancel -->
+        <button type="button" class="app-dialog-btn" id="app-dialog-cancel">Cancel</button>
+        <button type="submit" value="ok" class="app-dialog-btn app-dialog-primary" id="app-dialog-ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Review a proposed file change (diff) before applying it -->
+  <dialog id="diff-dialog" class="app-dialog diff-dialog" aria-labelledby="diff-title">
+    <div class="app-dialog-form">
+      <h2 id="diff-title" class="app-dialog-title">Review change</h2>
+      <p class="app-dialog-message" id="diff-summary"></p>
+      <ul class="diff-warnings hidden" id="diff-warnings"></ul>
+      <pre class="diff-view" id="diff-view" tabindex="0" aria-label="Changes"></pre>
+      <div class="app-dialog-actions">
+        <button type="button" class="app-dialog-btn" id="diff-cancel">Cancel</button>
+        <button type="button" class="app-dialog-btn app-dialog-primary" id="diff-apply">Apply change</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Live preview of a generated web page (ADR-015). Isolation comes from the /preview/ response header
+       "Content-Security-Policy: sandbox allow-scripts allow-modals" (opaque origin, no network, no access to
+       Loki). Do NOT also add a sandbox attribute to the iframe: this browser then refuses to render the frame
+       (verified 2026-11-16), and the header already gives the same isolation. -->
+
+  <dialog id="preview-dialog" class="app-dialog preview-dialog" aria-labelledby="preview-title">
+    <div class="preview-bar">
+      <span class="preview-title" id="preview-title">Preview</span>
+      <span class="preview-note">Sandboxed: runs its own code, cannot reach the internet, your files or Loki.</span>
+      <button type="button" class="app-dialog-btn" id="preview-reload">Reload</button>
+      <button type="button" class="app-dialog-btn app-dialog-primary" id="preview-close">Close</button>
+    </div>
+    <iframe id="preview-frame" class="preview-frame" title="Page preview" referrerpolicy="no-referrer"></iframe>
+  </dialog>
+
+  <!-- Review and run a PowerShell command Loki proposed (ADR-014) -->
+  <dialog id="cmd-dialog" class="app-dialog diff-dialog" aria-labelledby="cmd-title">
+    <div class="app-dialog-form">
+      <h2 id="cmd-title" class="app-dialog-title">Run this command?</h2>
+      <div class="cmd-risk" id="cmd-risk"></div>
+      <pre class="cmd-view" id="cmd-view" tabindex="0" aria-label="Command"></pre>
+      <p class="app-dialog-message" id="cmd-note"></p>
+      <div class="cmd-output-wrap hidden" id="cmd-output-wrap">
+        <div class="cmd-output-head" id="cmd-output-head"></div>
+        <pre class="cmd-view cmd-output" id="cmd-output" tabindex="0" aria-label="Output"></pre>
+      </div>
+      <div class="app-dialog-actions" id="cmd-actions"></div>
+    </div>
+  </dialog>
+
+  <script src="/static/app.js?v=37"></script>
+</body>
+</html>
