@@ -25,6 +25,7 @@ Loki is a private, local-first personal assistant and workflow automation platfo
 ## 2. Current Repository State (Verified Facts)
 
 * **Project Directory**: `D:\Loki` (linked via NTFS Directory Junction at `%USERPROFILE%\Desktop\Loki`)
+* **GitHub**: https://github.com/ThyrexGG/Loki (public, MIT). Pushed history starts at the public-release commit; the full development history is in the local-only branch `private-history` (never push it - it contains personal paths and notes).
 * **Python Interpreter with Installed Dependencies**: `%LOCALAPPDATA%\Python\bin\python.exe` (Python 3.14.7 with `fastapi`, `uvicorn`, `httpx`, `ollama`, `pydantic`, `scikit-learn`, `pandas`, `sqlite3`).
   * *Note*: Do **not** use `py` or bare `python` to launch Uvicorn; `py` resolves to a secondary Python 3.14 installation lacking `uvicorn`, and bare `python` triggers the Windows Store alias.
 * **Ollama Daemon**: `%LOCALAPPDATA%\Programs\Ollama\ollama.exe` (`v0.40.13`), serving on `127.0.0.1:11434` from `D:\OllamaModels` (`OLLAMA_MODELS=D:\OllamaModels` + NTFS Junction from `%USERPROFILE%\.ollama\models`) with **8 local models installed**: `qwen2.5:14b` (`14.8B`), `phi4:14b` (`14.7B`), `mistral-nemo:12b` (`12.2B`), `gemma2:9b` (`9.2B`, default), `deepseek-r1:8b` (`8.2B`), `llama3:latest` (`8.0B`), `qwen2.5:7b` (`7.6B`), and `qwen2.5-coder:7b` (`7.6B`).
