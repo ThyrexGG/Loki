@@ -78,6 +78,8 @@ flowchart TD
 * `app/config.py` resolves `DATA_DIR` from the `LOKI_DATA_DIR` environment variable (absolute path) when set, else `<project>/data`. Every stored file path derives from `DATA_DIR`.
 * `tests/run_tests.py` launches a second uvicorn on a free localhost port with a temporary `LOKI_DATA_DIR`, runs the suites with `LOKI_TEST_URL` / `LOKI_TEST_DATA_DIR`, then stops it, deletes the folder (kept on failure) and compares an md5 fingerprint of the real `data/` before/after. `tests/_isolated.py` makes each suite exit unless `LOKI_TEST_URL` is set. Ollama is shared between the two servers.
 
+* Gentle by default: waits for free RAM/VRAM before each AI suite, unloads models and pauses after it, below-normal priority, `LOKI_OLLAMA_THREADS` / `LOKI_OLLAMA_KEEP_ALIVE` for the isolated server (`--fast` disables).
+
 ### 2.2d Web Search & Link Reading (`app/web_tools.py`, `app/web_decider.py` — ADR-011)
 * `/api/chat/stream`: `decide_web(messages)` -> `read` (pasted links) / `search` / none. Emits `web_status`, then `sources` (`[{n, title, url}]`), then the normal model stream. Results are prepended to the latest user turn for this request only.
 * Safety: public http(s) 80/443 only, private/loopback addresses blocked after DNS and per redirect, size/time caps, untrusted-data wrapping, ledger entries (`web_search`, `web_read`; summary field `web_requests_count`).

@@ -198,9 +198,12 @@ You can remove all stored Loki data at any time without affecting your PC or you
 ```powershell
 & "$env:LOCALAPPDATA\Python\bin\python.exe" tests\run_tests.py         # all 9 suites
 & "$env:LOCALAPPDATA\Python\bin\python.exe" tests\run_tests.py m3 m8   # selected suites
+& "$env:LOCALAPPDATA\Python\bin\python.exe" tests\run_tests.py --fast   # full speed (only when you are away from the PC)
 ```
 
-The runner starts a separate Loki server with a throwaway data folder, so your chats, memories, settings and index are never touched (it checks this and reports it). Your normal Loki can stay open. Close games first: the tests use the GPU.
+The runner starts a separate Loki server with a throwaway data folder, so your chats, memories, settings and index are never touched (it checks this and reports it). Your normal Loki can stay open.
+
+It is **gentle by default**: before each AI suite it waits until at least 4 GB of RAM and 5 GB of GPU memory are free (and says so while it waits), unloads the model and pauses after each suite, runs at below-normal priority and caps Ollama's CPU threads, so the PC stays usable. The coding-agent suite (`m9`) needs no model and runs in about 2 seconds.
 
 ## 9. Troubleshooting
 
