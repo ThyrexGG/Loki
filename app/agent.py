@@ -286,7 +286,8 @@ def _shows_work_instead_of_doing(content: str, writes: int) -> bool:
 
 _PLACEHOLDER_TEXT = re.compile(
     r"lorem ipsum|content goes here|some content here|more content here|and some more content|"
-    r"\b(card|project|feature|item|service) \d+( title)?\b|\b(your|my) name\b|\bjohn doe\b|\bplaceholder\b|"
+    r"\b(card|project|feature|item|service|skill) \d+( title|:)?\b|\b(your|my) name\b|\bjohn doe\b|\bplaceholder\b|"
+    r"\bdetails about [a-z0-9 -]{3,35}\.|\bmore about me and my journey\b|\bwelcome to cool website\b|"
     r"\bexample\.com\b|\btitle goes here\b|\btext here\b|"
     # words from the starter design's outline (app/web_starter/GUIDE.md) left unchanged
     r"\bsite ?name\b|\bcard title\b|\bsection title\b|\bshort label\b|\bpanel title\b|\bwhat the number means\b|"
@@ -685,7 +686,7 @@ def _stopped(run: AgentRun) -> bool:
 
 async def _call_model(run: AgentRun, model: str, messages: list[dict[str, Any]], num_ctx: int) -> dict[str, Any]:
     payload = {"model": model, "messages": messages, "tools": OFFERED_TOOLS, "stream": False,
-               "options": {"num_ctx": num_ctx, "temperature": 0.2}}
+               "options": {"num_ctx": num_ctx, "temperature": 0.2, "repeat_penalty": 1.07, "top_p": 0.92}}
     async with httpx.AsyncClient(timeout=httpx.Timeout(MODEL_TIMEOUT_S, connect=5.0)) as client:
         task = asyncio.create_task(client.post(f"{ollama_service._get_base_url()}/api/chat", json=apply_gentle(payload)))
         while not task.done():
@@ -789,9 +790,10 @@ async def run_agent(
         if m.get("role") in ("user", "assistant") and str(m.get("content") or "").strip():
             history.append({"role": m["role"], "content": str(m["content"])})
     last_user = next((str(m.get("content") or "") for m in reversed(messages) if m.get("role") == "user"), "")
-    if created and history[-1]["role"] == "user" and _WEB_INTENT.search(last_user):
-        # New website: start from Loki's designed starter (style.css + script.js) so the 7B model only writes
-        # the page content; from scratch it produced plain, generic pages (measured 2026-11-16).
+    folder_empty = not any(project_store.iter_files(root))
+    if (created or folder_empty) and history[-1]["role"] == "user" and _WEB_INTENT.search(last_user):
+        # New website (or retry inside an empty attached folder): start from Loki's designed starter
+        # (style.css + script.js) so the 7B model only writes the page content.
         yield _ev({"type": "agent_step", "id": "s0", "tool": "write_file", "status": "running",
                    "title": "Adding Loki's starter design"})
         try:

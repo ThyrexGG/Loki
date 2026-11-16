@@ -616,3 +616,18 @@ Append a concise entry after each completed task or meaningful implementation st
   1. Restarted Uvicorn server on `127.0.0.1:8420` (also activating Task 33's `agent.py` changes).
   2. Verified `GET /` serves `btn-attach-image` and `app.js?v=39`.
   3. Verified `POST /api/screen/clipboard` with `X-Loki-Request: 1` returns `{"ok":false,"has_image":false}` when clipboard has no image, and verified `_encode_pil_image` scales a `2000x1000` RGBA image to `1280x640` JPEG (`5,087 B`).
+
+---
+
+## 2026-11-17 - Task 36: AI Intelligence & Quality Refinements (2-Pass Self-Refine, Model Escalation, Auto-Memory/Docs & Agent Starter Fix)
+
+* **Goal**: Make Loki's responses and coding agent noticeably smarter on the 8 GB RTX 5050 without extra VRAM overhead.
+* **Files Changed**:
+  * `app/ollama_service.py` - Added two-pass `refine: bool = False` support in `stream_chat` (Pass 1 drafts inside the collapsible `thinking` drawer; Pass 2 critiques the draft for bugs/edge cases/placeholders and streams the refined answer), tuned sampling (`repeat_penalty=1.07`, `top_p=0.92`), and expanded `SYSTEM_PROMPT` with a depth/edge-case/no-placeholder rubric.
+  * `app/main.py` - Added `refine: bool = False` on `ChatRequest`, automatic `8192` context promotion for `code` and `reasoning` routes when the chosen model fits 8 GB VRAM at 8k, conversational Auto-Memory (`"Remember that ..."` / `"Save to memory ..."`), and Auto-Document Recall (injecting top indexed chunks when `score >= 0.34` in normal chat).
+  * `app/agent.py` - Fixed empty attached project folders (`folder_empty = not any(project_store.iter_files(root))`) so retrying a website build in an already-attached empty folder still seeds `app/web_starter/`, expanded `_PLACEHOLDER_TEXT` to catch generic `"details about ..."`, `"More about me and my journey"`, and `"Welcome to Cool Website"` filler, and added `repeat_penalty=1.07`, `top_p=0.92` to `_call_model`.
+  * `static/index.html`, `static/app.js`, `static/styles.css` - Added the **Refine** composer chip (`#chk-refine`), added per-reply **Refine (2-pass)** and **Try model…** (`select-retry-model`, including `14B Max IQ` models) controls in `.msg-footer`, extracted `streamIntoAssistantMsg()` and `retryAssistantTurn()`, and bumped cache-busting to `styles.css?v=35` and `app.js?v=40`.
+* **Checks**:
+  1. `python -m py_compile app/main.py app/ollama_service.py app/agent.py app/screen.py` -> OK.
+  2. Restarted Uvicorn server on `127.0.0.1:8420`.
+  3. Ran `python tests/run_tests.py m9` -> `PASS m9 (1s)`, real `data/` untouched.

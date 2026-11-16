@@ -26,6 +26,7 @@ const state = {
   // Coding agent (ADR-016): on by default, remembered per browser.
   agentMode: (() => { try { return localStorage.getItem("loki.agent") !== "0"; } catch (e) { return true; } })(),
   agentRunId: null,
+  refineMode: false,
 };
 
 function showToast(msg, action = null) {
@@ -1023,6 +1024,17 @@ document.getElementById("chk-auto-model").addEventListener("change", async (e) =
     : `Auto model off: every reply uses ${state.selectedModel}`);
 });
 
+const refineChk = document.getElementById("chk-refine");
+if (refineChk) {
+  refineChk.checked = state.refineMode;
+  refineChk.addEventListener("change", (e) => {
+    state.refineMode = e.target.checked;
+    showToast(state.refineMode
+      ? "Deep Refine on: Loki drafts first, self-critiques, and writes a refined answer"
+      : "Deep Refine off: fast single-pass replies");
+  });
+}
+
 document.getElementById("chk-use-memories").addEventListener("change", async (e) => {
   state.useMemoriesInChat = e.target.checked;
   await saveSettings({ use_memories_in_chat: state.useMemoriesInChat });
@@ -1535,6 +1547,51 @@ function renderMessages() {
             showToast("Speaking reply locally via Windows System.Speech");
           });
           footer.appendChild(speakBtn);
+
+          if (!state.isStreaming && !m.agent) {
+            const refineBtn = document.createElement("button");
+            refineBtn.type = "button";
+            refineBtn.className = "btn-copy-turn";
+            refineBtn.title = "Re-run this answer with a 2-pass self-critique & refinement pass";
+            refineBtn.textContent = m.refined ? "Refined (2-pass)" : "Refine (2-pass)";
+            refineBtn.addEventListener("click", () => {
+              retryAssistantTurn(m, {
+                model: m.model || state.selectedModel,
+                autoRoute: false,
+                refine: true,
+              });
+            });
+            footer.appendChild(refineBtn);
+
+            if (modelPicker.models && modelPicker.models.length > 1) {
+              const retrySelect = document.createElement("select");
+              retrySelect.className = "select-retry-model";
+              retrySelect.title = "Re-run this question with another installed model (including 14B heavyweights)";
+              const placeholderOpt = document.createElement("option");
+              placeholderOpt.value = "";
+              placeholderOpt.textContent = "Try model…";
+              retrySelect.appendChild(placeholderOpt);
+              for (const mod of modelPicker.models) {
+                const f = friendlyModel(mod.name, mod.parameter_size);
+                const opt = document.createElement("option");
+                opt.value = mod.name;
+                const tag = mod.vram_fit === "offload" ? " (14B Max IQ)" : (mod.vram_fit === "tight" ? " (12B)" : "");
+                opt.textContent = `${f.label}${tag}`;
+                retrySelect.appendChild(opt);
+              }
+              retrySelect.addEventListener("change", () => {
+                const chosen = retrySelect.value;
+                retrySelect.value = "";
+                if (!chosen) return;
+                retryAssistantTurn(m, {
+                  model: chosen,
+                  autoRoute: false,
+                  refine: false,
+                });
+              });
+              footer.appendChild(retrySelect);
+            }
+          }
         }
 
         wrap.appendChild(footer);
@@ -1747,39 +1804,13 @@ chatInputEl.addEventListener("keydown", (e) => {
   }
 });
 
-// Submit chat prompt
-document.getElementById("chat-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  if (state.isStreaming) return;
-
-  const shot = state.pendingScreenshot;
-  const defaultImgPrompt = state.pendingImageKind === "screenshot"
-    ? "What's on my screen? Explain it and help me with what I'm doing."
-    : "What is in this image? Explain it and help me with what it shows.";
-  const text = chatInputEl.value.trim() || (shot ? defaultImgPrompt : "");
-  if (!text) return;
-  clearScreenshot();
-
-  chatInputEl.value = "";
-  autoResizeChatInput();
-  const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-  if (!state.chatId) state.chatId = newChatId();
-  const chatIdAtSend = state.chatId;
+async function streamIntoAssistantMsg(assistantMsg, historyForApi, opts = {}) {
+  const chatIdAtSend = state.chatId || (state.chatId = newChatId());
   const messagesAtSend = state.messages;
-  const userMsg = { role: "user", content: text, timestamp: now };
-  if (shot) userMsg.images = [shot];
-  state.messages.push(userMsg);
-  const assistantMsg = {
-    role: "assistant",
-    content: "",
-    model: state.selectedModel,
-    num_ctx: state.numCtx,
-    timestamp: now,
-    footer: "Streaming locally from Ollama...",
-  };
-  state.messages.push(assistantMsg);
-  renderMessages();
+  const chosenModel = opts.model || state.selectedModel;
+  const useAutoRoute = opts.autoRoute !== undefined ? opts.autoRoute : state.autoRoute;
+  const useRefine = opts.refine !== undefined ? opts.refine : state.refineMode;
+  const useAgent = opts.agent !== undefined ? opts.agent : state.agentMode;
 
   state.isStreaming = true;
   state.abortController = new AbortController();
@@ -1787,27 +1818,20 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
   document.getElementById("btn-stop-gen").classList.remove("hidden");
 
   try {
-    const historyForApi = state.messages
-      .slice(0, -1)
-      .map((m) => {
-        const out = { role: m.role, content: m.role === "assistant" ? splitThinking(m).answer : m.content };
-        if (m.images) out.images = m.images;
-        return out;
-      });
-
     const response = await fetch("/api/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         messages: historyForApi,
-        model: state.selectedModel,
+        model: chosenModel,
         num_ctx: state.numCtx,
         temperature: state.temperature,
         provider: "ollama",
         cloud_request_opt_in: false,
-        auto_route: state.autoRoute,
+        auto_route: useAutoRoute,
         project: state.project || null,
-        agent: state.agentMode,
+        agent: useAgent,
+        refine: Boolean(useRefine),
       }),
       signal: state.abortController.signal,
     });
@@ -1836,6 +1860,7 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
         } else if (evt.type === "meta") {
           assistantMsg.model = evt.model;
           assistantMsg.num_ctx = evt.num_ctx;
+          assistantMsg.refined = Boolean(evt.refined);
         } else if (evt.type === "thinking") {
           assistantMsg.thinking = (assistantMsg.thinking || "") + evt.content;
           renderMessages();
@@ -1901,8 +1926,9 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
           const speed = evt.tokens_per_sec ? `${evt.tokens_per_sec} tok/s` : "";
           const counts = `${evt.prompt_tokens || 0} in / ${evt.completion_tokens || 0} out`;
           const memInfo = evt.memories_used ? ` • ${evt.memories_used} mem` : "";
+          const refInfo = assistantMsg.refined ? " • Refined (2-pass)" : "";
           const where = assistantMsg.sources && assistantMsg.sources.length ? "On this PC, with web results" : "On this PC";
-          assistantMsg.footer = `${friendlyModel(evt.model).label} • ${counts}${speed ? " • " + speed : ""}${memInfo} • ${where}`;
+          assistantMsg.footer = `${friendlyModel(evt.model).label}${refInfo} • ${counts}${speed ? " • " + speed : ""}${memInfo} • ${where}`;
           renderMessages();
         } else if (evt.type === "aborted") {
           assistantMsg.footer = `Generation stopped by user (${evt.model})`;
@@ -1916,7 +1942,7 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
     }
   } catch (err) {
     if (err.name === "AbortError") {
-      assistantMsg.footer = `Generation stopped by user (${state.selectedModel})`;
+      assistantMsg.footer = `Generation stopped by user (${chosenModel})`;
     } else {
       assistantMsg.content += `\n[Connection error: ${err.message}]`;
       assistantMsg.footer = "Failed to reach local server";
@@ -1950,6 +1976,74 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
     }
     refreshStatus();
   }
+}
+
+async function retryAssistantTurn(assistantMsg, opts = {}) {
+  if (state.isStreaming) return;
+  const idx = state.messages.indexOf(assistantMsg);
+  if (idx <= 0) return;
+  const historyForApi = state.messages
+    .slice(0, idx)
+    .map((m) => {
+      const out = { role: m.role, content: m.role === "assistant" ? splitThinking(m).answer : m.content };
+      if (m.images) out.images = m.images;
+      return out;
+    });
+  const chosenModel = opts.model || assistantMsg.model || state.selectedModel;
+  assistantMsg.content = "";
+  assistantMsg.thinking = "";
+  assistantMsg.thinkingOpen = undefined;
+  assistantMsg.sources = [];
+  assistantMsg.webStatus = opts.refine ? "Pass 1/2: Drafting & self-checking..." : `Re-running with ${friendlyModel(chosenModel).label}...`;
+  assistantMsg.model = chosenModel;
+  assistantMsg.refined = Boolean(opts.refine);
+  assistantMsg.route = null;
+  assistantMsg.footer = "Streaming locally from Ollama...";
+  renderMessages();
+  await streamIntoAssistantMsg(assistantMsg, historyForApi, { ...opts, agent: false });
+}
+
+// Submit chat prompt
+document.getElementById("chat-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (state.isStreaming) return;
+
+  const shot = state.pendingScreenshot;
+  const defaultImgPrompt = state.pendingImageKind === "screenshot"
+    ? "What's on my screen? Explain it and help me with what I'm doing."
+    : "What is in this image? Explain it and help me with what it shows.";
+  const text = chatInputEl.value.trim() || (shot ? defaultImgPrompt : "");
+  if (!text) return;
+  clearScreenshot();
+
+  chatInputEl.value = "";
+  autoResizeChatInput();
+  const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  if (!state.chatId) state.chatId = newChatId();
+  const userMsg = { role: "user", content: text, timestamp: now };
+  if (shot) userMsg.images = [shot];
+  state.messages.push(userMsg);
+  const assistantMsg = {
+    role: "assistant",
+    content: "",
+    model: state.selectedModel,
+    num_ctx: state.numCtx,
+    timestamp: now,
+    footer: "Streaming locally from Ollama...",
+  };
+  state.messages.push(assistantMsg);
+  renderMessages();
+
+  const historyForApi = state.messages
+    .slice(0, -1)
+    .map((m) => {
+      const out = { role: m.role, content: m.role === "assistant" ? splitThinking(m).answer : m.content };
+      if (m.images) out.images = m.images;
+      return out;
+    });
+
+  await streamIntoAssistantMsg(assistantMsg, historyForApi, { refine: state.refineMode });
 });
 
 // ==========================================

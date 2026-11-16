@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Loki — Private Local AI</title>
   <link rel="icon" type="image/png" href="/static/loki.png?v=15" />
-  <link rel="stylesheet" href="/static/styles.css?v=34" />
+  <link rel="stylesheet" href="/static/styles.css?v=35" />
 </head>
 <body>
   <div class="app-shell">
@@ -271,6 +271,11 @@
                 <label class="composer-chip checkbox-chip" title="Auto model: code questions use qwen2.5-coder, maths/logic use deepseek-r1, everything else uses the model you picked. Only models that fit your GPU are used.">
                   <input type="checkbox" id="chk-auto-model" checked />
                   <span>Auto model</span>
+                </label>
+
+                <label class="composer-chip checkbox-chip" title="Deep Refine (2-pass): drafts first inside Reasoning, then self-checks for bugs, edge cases and depth before writing the final answer">
+                  <input type="checkbox" id="chk-refine" />
+                  <span>Refine</span>
                 </label>
 
                 <label class="composer-chip checkbox-chip" title="When unchecked, chat is ephemeral and not written to disk">
@@ -1009,6 +1014,6 @@
     </div>
   </dialog>
 
-  <script src="/static/app.js?v=39"></script>
+  <script src="/static/app.js?v=40"></script>
 </body>
 </html>

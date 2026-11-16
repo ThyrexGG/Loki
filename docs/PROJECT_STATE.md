@@ -1,6 +1,6 @@
 # Loki — Project State
 
-*Last Updated: 2026-11-16 (through Task 35)*
+*Last Updated: 2026-11-17 (through Task 36)*
 
 ## 1. Current Milestone & Status
 
@@ -15,6 +15,7 @@
   * **Stage 6 (Task 6.1)** — Three-Switch Cloud Provider Gateway Adapters & Outbound Activity/Cost Visibility Ledger (`app/cloud_gateway.py`).
   * **Stage 7 (Task 7.1)** — Explicit Opt-In Scheduled Workflow Automation & Foreground-Priority Resource Guardrails (`app/scheduler.py`).
   * **Stage 8 (Task 8.1 & Model Upgrade)** — Upgraded local model to **`gemma2:9b`** (`9.2B` parameters, `5.4 GB`), implemented the **Natural-Language Job-to-Workflow Planner** (`app/project_tools.py`), and added three domain workflows (`game_dev_project_audit`, `folder_organization_plan`, `content_publishing_kit`).
+  * **Task 36 (AI Intelligence & Quality Refinements)** - 2-pass Self-Refine mode (`#chk-refine` + per-reply button), per-reply **Try model…** escalation (including `14B Max IQ` models), conversational Auto-Memory & Auto-Document Recall in chat, tuned sampling (`repeat_penalty=1.07`, `top_p=0.92`, dynamic `8k` context), and empty-folder `web_starter` seeding in `app/agent.py`.
   * **Task 35 (Image Paste, Drag & Drop, File Attach)** - Paste (`Ctrl+V`), drag-and-drop, or pick any image in chat (`app/screen.py`, `static/app.js`).
   * **Task 34 (Gentle Tests)** - Test runner waits for free memory, one model at a time, low priority.
   * **Task 33 (Agent Websites)** - File blocks instead of tool arguments, designed web starter, stricter checks.
