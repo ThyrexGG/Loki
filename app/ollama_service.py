@@ -46,6 +46,20 @@ SYSTEM_PROMPT = (
 )
 
 
+def apply_gentle(payload: dict[str, Any]) -> dict[str, Any]:
+    """Optional limits for background runs such as the test suite (set by tests/run_tests.py):
+    LOKI_OLLAMA_THREADS caps the CPU threads Ollama uses, LOKI_OLLAMA_KEEP_ALIVE unloads the model soon
+    after use instead of keeping it in memory for minutes. Unset (normal use) changes nothing."""
+    import os
+    threads = os.environ.get("LOKI_OLLAMA_THREADS", "").strip()
+    if threads.isdigit() and int(threads) > 0:
+        payload.setdefault("options", {})["num_thread"] = int(threads)
+    keep = os.environ.get("LOKI_OLLAMA_KEEP_ALIVE", "").strip()
+    if keep and "keep_alive" not in payload:
+        payload["keep_alive"] = keep
+    return payload
+
+
 def system_prompt_with_date() -> str:
     from datetime import datetime
     now = datetime.now().astimezone()
@@ -283,7 +297,7 @@ class OllamaService:
 
             try:
                 async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0)) as client:
-                    async with client.stream("POST", f"{base_url}/api/chat", json=payload) as response:
+                    async with client.stream("POST", f"{base_url}/api/chat", json=apply_gentle(payload)) as response:
                         if response.status_code != 200:
                             err_body = await response.aread()
                             yield json.dumps(
@@ -448,7 +462,7 @@ class OllamaService:
 
             try:
                 async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0)) as client:
-                    async with client.stream("POST", f"{base_url}/api/chat", json=payload) as response:
+                    async with client.stream("POST", f"{base_url}/api/chat", json=apply_gentle(payload)) as response:
                         if response.status_code != 200:
                             err_body = await response.aread()
                             return {

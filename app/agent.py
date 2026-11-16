@@ -37,7 +37,7 @@ from app import commands as pc_commands
 from app import projects as project_store
 from app.cloud_gateway import activity_ledger
 from app.memory import memory_store
-from app.ollama_service import ollama_service
+from app.ollama_service import apply_gentle, ollama_service
 
 PROJECTS_HOME = Path(os.environ.get("LOKI_PROJECTS_DIR") or r"D:\LokiProjects")
 # Benchmarked 2026-11-16 (5 agent tasks x 2 rounds): qwen2.5:7b 8/10, qwen2.5-coder:7b 3/10 - the coder
@@ -687,7 +687,7 @@ async def _call_model(run: AgentRun, model: str, messages: list[dict[str, Any]],
     payload = {"model": model, "messages": messages, "tools": OFFERED_TOOLS, "stream": False,
                "options": {"num_ctx": num_ctx, "temperature": 0.2}}
     async with httpx.AsyncClient(timeout=httpx.Timeout(MODEL_TIMEOUT_S, connect=5.0)) as client:
-        task = asyncio.create_task(client.post(f"{ollama_service._get_base_url()}/api/chat", json=payload))
+        task = asyncio.create_task(client.post(f"{ollama_service._get_base_url()}/api/chat", json=apply_gentle(payload)))
         while not task.done():
             await asyncio.wait({task}, timeout=0.4)
             if _stopped(run):
