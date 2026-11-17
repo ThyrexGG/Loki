@@ -112,8 +112,14 @@ def _run_blocking(command: str, cwd: str, prelude: str = "") -> dict[str, Any]:
     # Merge errors into the output as readable text (captured stderr would otherwise be CLIXML), and
     # turn cmdlet errors into a non-zero exit code. `prelude` is trusted setup code from Loki itself
     # (the coding agent uses it to point `python` at the real interpreter).
+    default_py = (
+        "$__lokiPy = Join-Path $env:LOCALAPPDATA 'Python\\bin\\python.exe'\n"
+        "if (Test-Path $__lokiPy) { function python { & $__lokiPy @args }; function python3 { & $__lokiPy @args }; "
+        "function py { & $__lokiPy @args }; function pip { & $__lokiPy -m pip @args } }\n"
+    )
     script = (
-        "$ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[Text.Encoding]::UTF8;\n" + prelude +
+        "$ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[Text.Encoding]::UTF8;\n"
+        + default_py + prelude +
         "$__lokiErr = $false; $global:LASTEXITCODE = 0\n"
         "& {\n" + command + "\n} 2>&1 | ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) "
         "{ $__lokiErr = $true; 'ERROR: ' + $_.ToString() } else { $_ } } | Out-String -Width 220\n"

@@ -205,6 +205,10 @@ def upsert_chat(chat_id: str, messages: list[dict[str, Any]], title: str | None 
         if isinstance(m, dict) and m.get("images"):
             m = {k: v for k, v in m.items() if k != "images"}
             m["had_screenshot"] = True
+        if isinstance(m, dict) and isinstance(m.get("attached_file"), dict) and "content" in m["attached_file"]:
+            af = dict(m["attached_file"])
+            af.pop("content", None)
+            m = {**m, "attached_file": af}
         cleaned.append(m)
     messages = cleaned
     chat["messages"] = messages

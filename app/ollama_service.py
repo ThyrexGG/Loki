@@ -47,6 +47,43 @@ SYSTEM_PROMPT = (
     "software or running scripts downloaded from the internet."
 )
 
+TASK_PROMPTS: dict[str, str] = {
+    "code": (
+        "EXPERT CODING RUBRIC:\n"
+        "- Write complete, runnable, idiomatic code with all required imports, error handling, and edge-case checks.\n"
+        "- Never omit code with placeholders like '// ... rest of code' or 'TODO'.\n"
+        "- When writing Python snippets, Loki shows a Run button on ```python blocks so the user can test them directly."
+    ),
+    "reasoning": (
+        "FORMAL REASONING RUBRIC:\n"
+        "- Break complex logic, math, or trade-off questions into explicit steps.\n"
+        "- State assumptions clearly, verify intermediate calculations, and double-check the final answer before concluding."
+    ),
+    "pc": (
+        "WINDOWS 11 DIAGNOSTIC RUBRIC:\n"
+        "- Diagnose before changing anything. Give 2 to 4 short, read-only ```powershell blocks first and explain what each checks."
+    ),
+}
+
+PERSONA_PROMPTS: dict[str, str] = {
+    "engineer": (
+        "ACTIVE PERSONA — Senior Principal Engineer:\n"
+        "- Prioritize production-grade architecture, algorithmic efficiency, security boundaries, edge cases, and complete implementations."
+    ),
+    "tutor": (
+        "ACTIVE PERSONA — Step-by-Step Tutor:\n"
+        "- Explain concepts from first principles using clear mental models, concrete examples, and step-by-step breakdowns."
+    ),
+    "concise": (
+        "ACTIVE PERSONA — Concise & Direct (No Fluff):\n"
+        "- Answer in the fewest words possible. Put code, commands, or the exact conclusion first with zero filler."
+    ),
+    "gamedev": (
+        "ACTIVE PERSONA — Game & Roblox/Luau Engineer:\n"
+        "- Specialize in Roblox Studio (Luau), Unity (C#), Godot, game loops, physics, client-server replication, and 60+ FPS optimization."
+    ),
+}
+
 
 def apply_gentle(payload: dict[str, Any]) -> dict[str, Any]:
     """Optional limits for background runs such as the test suite (set by tests/run_tests.py):
@@ -277,6 +314,7 @@ class OllamaService:
                     "temperature": float(temperature),
                     "repeat_penalty": 1.07,
                     "top_p": 0.92,
+                    "min_p": 0.05,
                 },
             }
             if think is False:

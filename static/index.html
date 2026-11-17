@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Loki — Private Local AI</title>
   <link rel="icon" type="image/png" href="/static/loki.png?v=15" />
-  <link rel="stylesheet" href="/static/styles.css?v=35" />
+  <link rel="stylesheet" href="/static/styles.css?v=36" />
 </head>
 <body>
   <div class="app-shell">
@@ -228,10 +228,19 @@
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line></svg>
               </button>
             </div>
+            <div class="screen-attachment hidden" id="file-attachment">
+              <div class="screen-attachment-text">
+                <strong id="file-attachment-title">File attached</strong>
+                <span id="file-attachment-sub">Sent with your next message inside untrusted-data tags.</span>
+              </div>
+              <button type="button" class="pm-remove" id="btn-remove-file" title="Remove attached file" aria-label="Remove attached file">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line></svg>
+              </button>
+            </div>
             <textarea
               id="chat-input"
               rows="1"
-              placeholder="Message Loki... (Paste or drop an image anytime)"
+              placeholder="Message Loki... (Paste an image or drop any code/text file)"
             ></textarea>
 
             <div class="composer-toolbar">
@@ -251,6 +260,17 @@
                     <option value="0.1">0.1</option>
                     <option value="0.3" selected>0.3</option>
                     <option value="0.7">0.7</option>
+                  </select>
+                </label>
+
+                <label class="composer-chip" title="Reasoning & answer style preset">
+                  <span>Style</span>
+                  <select id="select-persona">
+                    <option value="auto" selected>Auto</option>
+                    <option value="engineer">Engineer</option>
+                    <option value="tutor">Tutor</option>
+                    <option value="concise">Concise</option>
+                    <option value="gamedev">Game Dev</option>
                   </select>
                 </label>
 
@@ -294,8 +314,8 @@
                 <button type="button" id="btn-stop-tts" class="btn-ghost-pill hidden" title="Stop local voice playback">
                   Stop voice
                 </button>
-                <input type="file" id="input-attach-image" accept="image/*" class="visually-hidden" tabindex="-1" />
-                <button type="button" id="btn-attach-image" class="btn-composer-mic" title="Attach an image file (or paste with Ctrl+V / drag and drop)" aria-label="Attach an image">
+                <input type="file" id="input-attach-image" accept="image/*,.txt,.md,.py,.js,.ts,.jsx,.tsx,.html,.css,.json,.csv,.yaml,.yml,.toml,.ini,.cfg,.log,.sql,.ps1,.bat,.sh,.lua,.luau,.c,.cpp,.h,.cs,.java,.go,.rs,.rb,.php,.xml" class="visually-hidden" tabindex="-1" />
+                <button type="button" id="btn-attach-image" class="btn-composer-mic" title="Attach an image or code/text/log/CSV file (or paste with Ctrl+V / drag and drop)" aria-label="Attach a file or image">
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <rect x="3" y="3" width="18" height="18" rx="2"></rect>
                     <circle cx="8.5" cy="8.5" r="1.5"></circle>
@@ -1014,6 +1034,6 @@
     </div>
   </dialog>
 
-  <script src="/static/app.js?v=40"></script>
+  <script src="/static/app.js?v=41"></script>
 </body>
 </html>

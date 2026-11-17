@@ -642,5 +642,22 @@ Append a concise entry after each completed task or meaningful implementation st
   1. Increased `Test-Url` timeout and added a 12-second wait if an existing `uvicorn.*8420` process is already starting up.
   2. If an existing `uvicorn.*8420` process remains unresponsive after waiting, stop it before binding port `8420`.
   3. If `$server.HasExited` triggers because another instance bound port `8420` first, re-check `Test-Url` before failing.
-  4. Explicitly set `$env:OLLAMA_MODELS = 'D:\OllamaModels'` when `D:\OllamaModels` exists.
+  4. Explicitly set `$env:OLLAMA_MODELS = 'D:\OllamaModels'` when `D:\OllamaModels` exists, clean up any headless `msedge.exe` processes holding `D:\Loki\desktop\profile`, and bring the Edge window to the foreground (`[LokiShell]::BringToFront`).
 * **Checks**: Launched `D:\Loki\desktop\Loki.ps1` -> server and Edge app window opened cleanly with HTTP 200.
+
+---
+
+## 2026-11-18 - Task 38: Workstation & Intelligence Upgrade Pass 2 (Code/Text File Drop, Interactive Python Runner, Edit & Resend, Persona Presets & Task-Specific Prompts)
+
+* **Goal**: Make Loki smarter and more practical for day-to-day coding, debugging, and learning without downloading new models or increasing VRAM usage.
+* **Files Changed**:
+  * `app/ollama_service.py` - Added `TASK_PROMPTS` (`code`, `reasoning`, `pc`), `PERSONA_PROMPTS` (`engineer`, `tutor`, `concise`, `gamedev`), and `"min_p": 0.05` in `stream_chat` to cut low-probability hallucinated tokens on quantized `Q4` models.
+  * `app/main.py` - Added `persona: str | None = None` to `ChatRequest`, added `attached_file` handling in `/api/chat/stream` (wrapping file content in `<untrusted_data source="attached_file:...">`, routing code extensions to the `code` specialist `qwen2.5-coder:7b` with `8192` context when it fits VRAM, and capping `code` task temperature to `<= 0.2`), and injected `TASK_PROMPTS` + `PERSONA_PROMPTS` into `extra_system`.
+  * `app/commands.py` - Added `default_py` prelude in `_run_blocking()` so `python`, `python3`, `py`, and `pip` always resolve to `%LOCALAPPDATA%\Python\bin\python.exe` in reviewed command runs.
+  * `app/config.py` - Updated `upsert_chat()` to strip `attached_file["content"]` when saving chat history while keeping `name`, `lines`, and `size` metadata.
+  * `static/index.html`, `static/app.js`, `static/styles.css` - Added `#file-attachment` preview bar, expanded `#input-attach-image` and `#tab-chat` drag-and-drop to accept code/text/log/CSV files (`<= 96 KB`), added **Run Python** (`btn-run-python`) on `python` code blocks (routing through the reviewed `#cmd-dialog`), added **Edit** (`btn-edit-user-msg`) on user messages in chat, added the `#select-persona` (`Auto`, `Engineer`, `Tutor`, `Concise`, `Game Dev`) composer chip, and bumped cache-busting to `styles.css?v=36` and `app.js?v=41`.
+* **Checks**:
+  1. `python -m py_compile app/main.py app/ollama_service.py app/commands.py app/config.py` -> OK.
+  2. `commands._run_blocking("python -c @'\nprint(21 * 2)\n'@", ...)` -> `exit_code == 0`, output `42`.
+  3. `python tests/run_tests.py m9` -> `PASS m9 (1s)`, real `data/` untouched.
+  4. Restarted Uvicorn server on `127.0.0.1:8420` and verified `GET /` serves `select-persona` and `app.js?v=41`.

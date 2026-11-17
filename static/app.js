@@ -27,6 +27,8 @@ const state = {
   agentMode: (() => { try { return localStorage.getItem("loki.agent") !== "0"; } catch (e) { return true; } })(),
   agentRunId: null,
   refineMode: false,
+  persona: "auto",
+  pendingFile: null,
 };
 
 function showToast(msg, action = null) {
@@ -83,12 +85,14 @@ function renderMarkdown(rawText) {
     const cleanLang = escapeHtml(infoStr.split(/\s+/)[0] || "code");
     const langAttr = cleanLang.toLowerCase();
     const runnable = /^(powershell|pwsh|ps1|ps)$/i.test(cleanLang);
+    const runnablePy = /^(python|py)$/i.test(cleanLang);
     const previewable = /^(html|htm)$/i.test(cleanLang);
     codeBlocks.push(
-      `<div class="md-code-block${runnable ? " md-run-block" : ""}" data-lang="${langAttr}">` +
+      `<div class="md-code-block${(runnable || runnablePy) ? " md-run-block" : ""}" data-lang="${langAttr}">` +
         `<div class="md-code-header"><span>${cleanLang}</span><span class="md-code-actions">` +
         `<button type="button" class="btn-copy-code">Copy</button>` +
         (runnable ? `<button type="button" class="btn-run-command" title="Review this command, then run it on this PC">Run</button>` : "") +
+        (runnablePy ? `<button type="button" class="btn-run-python" title="Review and run this Python script on this PC">Run Python</button>` : "") +
         (previewable ? `<button type="button" class="btn-download-html" title="Save this page as an .html file">Download</button>` +
           `<button type="button" class="btn-preview-html" title="Open this page in a safe preview">Preview</button>` : "") +
         `</span></div>` +
@@ -212,6 +216,15 @@ document.addEventListener("click", (e) => {
     const block = runBtn.closest(".md-code-block");
     const turn = runBtn.closest(".msg");
     reviewCommand(block.querySelector("code").textContent, turn ? turn.dataset.project : "");
+    return;
+  }
+  const runPyBtn = e.target.closest(".btn-run-python");
+  if (runPyBtn) {
+    const block = runPyBtn.closest(".md-code-block");
+    const turn = runPyBtn.closest(".msg");
+    const pyCode = (block && block.querySelector("code") ? block.querySelector("code").textContent : "").replace(/\r\n/g, "\n");
+    const safePy = pyCode.replace(/\n'@/g, "\n' @");
+    reviewCommand(`python -c @'\n${safePy}\n'@`, turn ? turn.dataset.project : "");
     return;
   }
   const reviewBtn = e.target.closest(".btn-review-change");
@@ -691,7 +704,69 @@ function attachImageBlob(fileOrBlob, label = "Image attached") {
   reader.readAsDataURL(fileOrBlob);
 }
 
+function clearPendingFile() {
+  state.pendingFile = null;
+  const el = document.getElementById("file-attachment");
+  if (el) el.classList.add("hidden");
+}
+
+function isImageFile(fileOrBlob) {
+  if (!fileOrBlob) return false;
+  const mime = (fileOrBlob.type || "").toLowerCase();
+  const name = (fileOrBlob.name || "").toLowerCase();
+  return mime.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(name);
+}
+
+function attachTextOrCodeFile(file) {
+  if (state.isStreaming) {
+    showToast("Wait for the current reply to finish before attaching a file");
+    return;
+  }
+  if (!file) return;
+  const maxBytes = 96 * 1024;
+  if (file.size > maxBytes) {
+    showToast(`File is larger than 96 KB (${Math.round(file.size / 1024)} KB). Attach the project folder instead.`);
+    return;
+  }
+  const reader = new FileReader();
+  reader.onerror = () => showToast("Could not read that file");
+  reader.onload = () => {
+    const content = String(reader.result || "");
+    if (content.includes("\u0000")) {
+      showToast("That looks like a binary file. Attach a text, code, log, or CSV file, or an image.");
+      return;
+    }
+    const lines = content ? content.replace(/\r\n/g, "\n").split("\n").length : 0;
+    state.pendingFile = {
+      name: file.name || "attached.txt",
+      size: file.size || content.length,
+      lines,
+      content,
+    };
+    const titleEl = document.getElementById("file-attachment-title");
+    const subEl = document.getElementById("file-attachment-sub");
+    if (titleEl) titleEl.textContent = `${state.pendingFile.name} (${lines} line${lines === 1 ? "" : "s"})`;
+    if (subEl) subEl.textContent = "Included with your next question (code files route to Qwen 2.5 Coder).";
+    const bar = document.getElementById("file-attachment");
+    if (bar) bar.classList.remove("hidden");
+    showToast(`Attached ${state.pendingFile.name} (${lines} lines). Ask your question, or press Send.`);
+    if (typeof chatInputEl !== "undefined" && chatInputEl) chatInputEl.focus();
+  };
+  reader.readAsText(file);
+}
+
+function handleAttachedFile(file) {
+  if (!file) return;
+  if (isImageFile(file)) {
+    attachImageBlob(file, file.name ? `Image attached (${file.name})` : "Image attached");
+  } else {
+    attachTextOrCodeFile(file);
+  }
+}
+
 document.getElementById("btn-remove-screenshot").addEventListener("click", clearScreenshot);
+const btnRemoveFile = document.getElementById("btn-remove-file");
+if (btnRemoveFile) btnRemoveFile.addEventListener("click", clearPendingFile);
 
 const inputAttachImage = document.getElementById("input-attach-image");
 const btnAttachImage = document.getElementById("btn-attach-image");
@@ -702,7 +777,7 @@ if (btnAttachImage && inputAttachImage) {
   });
   inputAttachImage.addEventListener("change", () => {
     const file = inputAttachImage.files && inputAttachImage.files[0];
-    if (file) attachImageBlob(file, file.name ? `Image attached (${file.name})` : "Image attached");
+    if (file) handleAttachedFile(file);
     inputAttachImage.value = "";
   });
 }
@@ -783,7 +858,7 @@ if (chatTabDropZone && chatComposerForm) {
     if (!files || !files.length) return;
     e.preventDefault();
     const file = files[0];
-    attachImageBlob(file, file.name ? `Image attached (${file.name})` : "Image attached");
+    handleAttachedFile(file);
   });
 }
 
@@ -987,6 +1062,21 @@ document.getElementById("select-temp").addEventListener("change", (e) => {
   state.temperature = parseFloat(e.target.value);
   saveSettings({ temperature: state.temperature });
 });
+
+const personaSelect = document.getElementById("select-persona");
+if (personaSelect) {
+  personaSelect.addEventListener("change", (e) => {
+    state.persona = e.target.value || "auto";
+    const labels = {
+      auto: "Auto style",
+      engineer: "Senior Staff Engineer style",
+      tutor: "Step-by-step Tutor style",
+      concise: "Concise / Direct style",
+      gamedev: "Game & Luau Dev style",
+    };
+    showToast(`Switched to ${labels[state.persona] || state.persona}`);
+  });
+}
 
 document.getElementById("chk-save-history").addEventListener("change", async (e) => {
   state.saveHistory = e.target.checked;
@@ -1392,6 +1482,13 @@ function renderMessages() {
       const bubble = document.createElement("div");
       bubble.className = "msg-user-bubble";
       bubble.textContent = m.content;
+      if (m.attached_file && m.attached_file.name) {
+        const fBadge = document.createElement("div");
+        fBadge.className = "msg-file-badge";
+        const linesTxt = m.attached_file.lines ? ` · ${m.attached_file.lines} lines` : "";
+        fBadge.textContent = `📄 ${m.attached_file.name}${linesTxt}`;
+        bubble.prepend(fBadge);
+      }
       if (m.images && m.images.length) {
         const img = document.createElement("img");
         img.className = "msg-screenshot";
@@ -1406,12 +1503,40 @@ function renderMessages() {
       }
       turn.appendChild(bubble);
 
+      const meta = document.createElement("div");
+      meta.className = "msg-user-meta";
       if (m.timestamp) {
-        const meta = document.createElement("div");
-        meta.className = "msg-user-meta";
-        meta.textContent = m.timestamp;
-        turn.appendChild(meta);
+        const tsSpan = document.createElement("span");
+        tsSpan.textContent = m.timestamp;
+        meta.appendChild(tsSpan);
       }
+      if (!state.isStreaming) {
+        const editBtn = document.createElement("button");
+        editBtn.type = "button";
+        editBtn.className = "btn-edit-user-msg";
+        editBtn.title = "Edit this message and resend from here";
+        editBtn.textContent = "Edit";
+        editBtn.addEventListener("click", () => {
+          if (state.isStreaming) return;
+          const idx = state.messages.indexOf(m);
+          if (idx < 0) return;
+          chatInputEl.value = m.content || "";
+          if (m.attached_file && m.attached_file.content) {
+            state.pendingFile = { ...m.attached_file };
+            const titleEl = document.getElementById("file-attachment-title");
+            if (titleEl) titleEl.textContent = `${m.attached_file.name} (${m.attached_file.lines || 0} lines)`;
+            const bar = document.getElementById("file-attachment");
+            if (bar) bar.classList.remove("hidden");
+          }
+          state.messages = state.messages.slice(0, idx);
+          renderMessages();
+          autoResizeChatInput();
+          chatInputEl.focus();
+          showToast("Message loaded into composer — edit and press Send");
+        });
+        meta.appendChild(editBtn);
+      }
+      turn.appendChild(meta);
     } else {
       const modelLabel = m.model || state.selectedModel;
       const ctxLabel = m.num_ctx ? `ctx ${m.num_ctx}` : "";
@@ -1832,6 +1957,7 @@ async function streamIntoAssistantMsg(assistantMsg, historyForApi, opts = {}) {
         project: state.project || null,
         agent: useAgent,
         refine: Boolean(useRefine),
+        persona: state.persona || "auto",
       }),
       signal: state.abortController.signal,
     });
@@ -1987,6 +2113,7 @@ async function retryAssistantTurn(assistantMsg, opts = {}) {
     .map((m) => {
       const out = { role: m.role, content: m.role === "assistant" ? splitThinking(m).answer : m.content };
       if (m.images) out.images = m.images;
+      if (m.attached_file) out.attached_file = m.attached_file;
       return out;
     });
   const chosenModel = opts.model || assistantMsg.model || state.selectedModel;
@@ -2009,12 +2136,17 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
   if (state.isStreaming) return;
 
   const shot = state.pendingScreenshot;
+  const attachedFile = state.pendingFile;
   const defaultImgPrompt = state.pendingImageKind === "screenshot"
     ? "What's on my screen? Explain it and help me with what I'm doing."
     : "What is in this image? Explain it and help me with what it shows.";
-  const text = chatInputEl.value.trim() || (shot ? defaultImgPrompt : "");
+  const defaultFilePrompt = attachedFile
+    ? `Review ${attachedFile.name}, explain what it does, and point out any bugs or improvements.`
+    : "";
+  const text = chatInputEl.value.trim() || (shot ? defaultImgPrompt : defaultFilePrompt);
   if (!text) return;
   clearScreenshot();
+  clearPendingFile();
 
   chatInputEl.value = "";
   autoResizeChatInput();
@@ -2023,6 +2155,7 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
   if (!state.chatId) state.chatId = newChatId();
   const userMsg = { role: "user", content: text, timestamp: now };
   if (shot) userMsg.images = [shot];
+  if (attachedFile) userMsg.attached_file = attachedFile;
   state.messages.push(userMsg);
   const assistantMsg = {
     role: "assistant",
@@ -2040,6 +2173,7 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
     .map((m) => {
       const out = { role: m.role, content: m.role === "assistant" ? splitThinking(m).answer : m.content };
       if (m.images) out.images = m.images;
+      if (m.attached_file) out.attached_file = m.attached_file;
       return out;
     });
 
