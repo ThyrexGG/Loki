@@ -631,3 +631,16 @@ Append a concise entry after each completed task or meaningful implementation st
   1. `python -m py_compile app/main.py app/ollama_service.py app/agent.py app/screen.py` -> OK.
   2. Restarted Uvicorn server on `127.0.0.1:8420`.
   3. Ran `python tests/run_tests.py m9` -> `PASS m9 (1s)`, real `data/` untouched.
+
+---
+
+## 2026-11-17 - Task 37: Fix Desktop Launcher Port-8420 Race Condition (`WinError 10048`)
+
+* **Problem** (user screenshot): Clicking the Desktop `Loki` shortcut showed `"Loki server failed to start. See D:\Loki\desktop\server.log.err"`, and `server.log.err` contained `ERROR: [Errno 10048] error while attempting to bind on address ('127.0.0.1', 8420)`.
+* **Cause**: When an existing `python.exe -m uvicorn` process on port 8420 was slow to respond (or still importing `scikit-learn`/`pandas` from `D:` on a second click), `Test-Url` timed out after 2 s and `desktop/Loki.ps1` spawned a second `uvicorn` process that immediately exited with `WinError 10048`, triggering `Show-Error`.
+* **Fix** (`desktop/Loki.ps1`):
+  1. Increased `Test-Url` timeout and added a 12-second wait if an existing `uvicorn.*8420` process is already starting up.
+  2. If an existing `uvicorn.*8420` process remains unresponsive after waiting, stop it before binding port `8420`.
+  3. If `$server.HasExited` triggers because another instance bound port `8420` first, re-check `Test-Url` before failing.
+  4. Explicitly set `$env:OLLAMA_MODELS = 'D:\OllamaModels'` when `D:\OllamaModels` exists.
+* **Checks**: Launched `D:\Loki\desktop\Loki.ps1` -> server and Edge app window opened cleanly with HTTP 200.

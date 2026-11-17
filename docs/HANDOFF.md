@@ -1,6 +1,6 @@
 # Loki — Model-to-Model Handoff Brief
 
-*Last Updated: 2026-11-17 (Task 36: 2-pass self-refine, model escalation, auto-memory/docs & agent starter fix)*
+*Last Updated: 2026-11-17 (Task 37: desktop launcher port-8420 race fix)*
 
 > **AGENT CONTINUATION INSTRUCTION (MANDATORY)**
 > Before editing any code in this repository, every AI agent or coding session MUST:
@@ -41,6 +41,7 @@ Loki is a private, local-first personal assistant and workflow automation platfo
   * **Tasks 12–17 (2026-11-15)**: Default model reset to `gemma2:9b` + docs consistency; desktop app (`desktop/Loki.ps1`, Edge `--app` window, Desktop/Start Menu shortcuts, ADR-008); serpent logo/icon (`desktop/make_icon.py`); own taskbar identity `Loki.LocalAI` (`desktop/LokiShell.cs`); content-hashed icon path to beat the Windows icon cache.
   * **Task 18 (2026-11-16)**: Git repository initialised (`main`; personal `data/*`, Edge profile and logs ignored); `verify_m1`–`m8` re-run with `data/` backed up and restored (all 8 pass after fixing stale paths in m3/m4/m8; run them with the GPU free — a full-screen game causes timeouts); multi-chat history (sidebar **Chats** list, `/api/chats` API, conversations.json v2 with legacy migration).
   * **Task 20 (2026-11-16)**: VRAM-aware model ratings and default selection (`app/model_fit.py`, ADR-009); grouped model picker with warnings.
+  * **Task 37 (2026-11-17)**: Fixed `desktop/Loki.ps1` port-8420 startup race (`WinError 10048`) when an existing Uvicorn process is slow or still importing on `D:`.
   * **Task 36 (2026-11-17)**: Two-pass **Refine** mode (`#chk-refine` + per-reply `Refine (2-pass)` button), per-reply **Try model…** switcher (including `qwen2.5:14b` and `phi4:14b`), conversational Auto-Memory (`"Remember that ..."`), Auto-Document Recall in chat, tuned sampling (`repeat_penalty=1.07`, `top_p=0.92`, automatic `8k` context on code/reasoning), and empty-folder `web_starter` seeding in `app/agent.py`.
   * **Task 35 (2026-11-16)**: Image paste (`Ctrl+V` from `Win+Shift+S` snip, browser copy, or Windows File Explorer copied file via `/api/screen/clipboard`), drag-and-drop image support, and an **Attach image** button in the chat composer (`app/screen.py`, `static/app.js`).
   * **Task 34 (2026-11-16)**: Gentle test runner - waits for free RAM/VRAM, one model at a time, low priority (`--fast` for full speed). Ask the user before running model suites.

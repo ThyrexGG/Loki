@@ -25,24 +25,47 @@ function Show-Error([string]$msg) {
 }
 
 # 1. Local Ollama daemon (uses OLLAMA_MODELS if you set it, otherwise Ollama's default folder)
-if (-not (Test-Url 'http://127.0.0.1:11434/api/version')) {
+if (-not (Test-Url 'http://127.0.0.1:11434/api/version' 4)) {
     if (Test-Path $OllamaExe) {
         $env:OLLAMA_HOST = '127.0.0.1:11434'
+        if (Test-Path 'D:\OllamaModels') { $env:OLLAMA_MODELS = 'D:\OllamaModels' }
         Start-Process -FilePath $OllamaExe -ArgumentList 'serve' -WindowStyle Hidden
     }
 }
 
 # 2. Loki server (hidden, bound to 127.0.0.1 only)
 $server = $null
-if (-not (Test-Url "$Url/static/loki.png")) {
+if (-not (Test-Url "$Url/static/loki.png" 3)) {
     if (-not (Test-Path $PythonExe)) { Show-Error "Python not found at $PythonExe"; exit 1 }
+    # If another uvicorn is already starting up on port 8420, wait up to 12s for it before spawning a second one
+    $existing = Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match 'uvicorn.*8420' }
+    if ($existing) {
+        $waitExisting = (Get-Date).AddSeconds(12)
+        while (-not (Test-Url "$Url/static/loki.png" 2) -and (Get-Date) -lt $waitExisting) {
+            Start-Sleep -Milliseconds 400
+        }
+    }
+}
+if (-not (Test-Url "$Url/static/loki.png" 3)) {
+    # Stop any hung uvicorn process still holding port 8420 so bind never fails with WinError 10048
+    Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match 'uvicorn.*8420' } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Milliseconds 500
     $server = Start-Process -FilePath $PythonExe `
         -ArgumentList '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8420' `
         -WorkingDirectory $Root -NoNewWindow -PassThru `
         -RedirectStandardOutput $LogFile -RedirectStandardError "$LogFile.err"
     $deadline = (Get-Date).AddSeconds(45)
-    while (-not (Test-Url "$Url/static/loki.png")) {
-        if ($server.HasExited -or (Get-Date) -gt $deadline) {
+    while (-not (Test-Url "$Url/static/loki.png" 3)) {
+        if ((Get-Date) -gt $deadline) {
+            Show-Error "Loki server failed to start. See $LogFile.err"
+            exit 1
+        }
+        if ($server.HasExited) {
+            Start-Sleep -Seconds 2
+            if (Test-Url "$Url/static/loki.png" 3) { break }
             Show-Error "Loki server failed to start. See $LogFile.err"
             exit 1
         }
