@@ -56,6 +56,12 @@ public static class LokiShell
     [DllImport("user32.dll")]
     static extern IntPtr SendMessage(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
 
+    [DllImport("user32.dll")]
+    static extern bool ShowWindow(IntPtr hwnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    static extern bool SetForegroundWindow(IntPtr hwnd);
+
     static readonly Guid AppUserModelFmt = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3");
     const uint PID_RelaunchCommand = 2, PID_RelaunchIcon = 3, PID_RelaunchName = 4, PID_ID = 5;
 
@@ -109,5 +115,12 @@ public static class LokiShell
         IntPtr small = LoadImage(IntPtr.Zero, icoPath, IMAGE_ICON, 16, 16, LR_LOADFROMFILE);
         if (big != IntPtr.Zero) SendMessage(hwnd, WM_SETICON, (IntPtr)1, big);
         if (small != IntPtr.Zero) SendMessage(hwnd, WM_SETICON, (IntPtr)0, small);
+    }
+
+    public static void BringToFront(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        ShowWindow(hwnd, 9 /* SW_RESTORE */);
+        SetForegroundWindow(hwnd);
     }
 }

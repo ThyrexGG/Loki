@@ -81,7 +81,22 @@ $browser = @(
 ) | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $browser) { Start-Process $Url; exit 0 }
 
-$window = Start-Process -FilePath $browser -PassThru -ArgumentList @(
+# Clear any lingering headless/hidden Edge processes holding $AppProfile so the new window always opens visibly
+$staleEdge = Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match [regex]::Escape($AppProfile) }
+if ($staleEdge) {
+    $hasVisible = $false
+    foreach ($ep in $staleEdge) {
+        $pObj = Get-Process -Id $ep.ProcessId -ErrorAction SilentlyContinue
+        if ($pObj -and $pObj.MainWindowHandle -ne [IntPtr]::Zero) { $hasVisible = $true }
+    }
+    if (-not $hasVisible) {
+        foreach ($ep in $staleEdge) { Stop-Process -Id $ep.ProcessId -Force -ErrorAction SilentlyContinue }
+        Start-Sleep -Milliseconds 400
+    }
+}
+
+$window = Start-Process -FilePath $browser -WindowStyle Normal -PassThru -ArgumentList @(
     "--app=$Url", "--user-data-dir=`"$AppProfile`"", '--window-size=1320,880',
     '--no-first-run', '--no-default-browser-check', '--disable-sync'
 )
@@ -101,6 +116,7 @@ try {
         if ($window.MainWindowHandle -ne [IntPtr]::Zero) {
             [LokiShell]::SetWindowAppId($window.MainWindowHandle, $AppId, $relaunch, $ico, 'Loki')
             [LokiShell]::SetWindowIcon($window.MainWindowHandle, $ico)
+            [LokiShell]::BringToFront($window.MainWindowHandle)
             break
         }
         Start-Sleep -Milliseconds 200
