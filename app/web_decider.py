@@ -68,8 +68,13 @@ def decide(messages: list[dict[str, Any]]) -> dict[str, Any]:
         return {"mode": "search", "query": build_query(messages), "urls": [], "reason": "you asked to search"}
 
     task, _ = classify_text(last)
-    if task in ("code", "reasoning") or _CREATIVE_OR_CHAT.search(last) or len(last.split()) < 3:
+    has_code_block = "```" in last or "\n" in last.strip()
+    if _CREATIVE_OR_CHAT.search(last) or len(last.split()) < 3:
         return none
+    if task in ("code", "reasoning"):
+        # Allow web search for short single-line version/release/latest questions about programming tools
+        if not (task == "code" and not has_code_block and len(last) < 160 and _TIME_SENSITIVE.search(last)):
+            return none
 
     if _TIME_SENSITIVE.search(last):
         return {"mode": "search", "query": build_query(messages), "urls": [],

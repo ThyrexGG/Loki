@@ -1307,15 +1307,22 @@ async function loadChatList() {
 
 function renderChatList() {
   const list = document.getElementById("chat-list");
+  const searchInput = document.getElementById("chat-search-input");
+  const filter = (searchInput && searchInput.value ? searchInput.value.trim().toLowerCase() : "");
   list.innerHTML = "";
-  if (state.chats.length === 0) {
+  const visibleChats = filter
+    ? state.chats.filter((c) => (c.title || "").toLowerCase().includes(filter))
+    : state.chats;
+  if (visibleChats.length === 0) {
     const empty = document.createElement("div");
     empty.className = "chat-list-empty";
-    empty.textContent = state.saveHistory ? "No saved chats yet" : "History saving is off";
+    empty.textContent = filter
+      ? "No matching chats"
+      : (state.saveHistory ? "No saved chats yet" : "History saving is off");
     list.appendChild(empty);
     return;
   }
-  for (const c of state.chats) {
+  for (const c of visibleChats) {
     const item = document.createElement("div");
     item.className = "chat-item" + (c.id === state.chatId ? " active" : "");
     item.title = `${c.title}\nDouble-click to rename`;
@@ -1407,6 +1414,62 @@ async function deleteChat(c) {
 
 // New chat: starts a fresh conversation; saved chats stay in the sidebar.
 document.getElementById("btn-clear-chat").addEventListener("click", startNewChat);
+
+const chatSearchInput = document.getElementById("chat-search-input");
+if (chatSearchInput) {
+  chatSearchInput.addEventListener("input", renderChatList);
+}
+
+const btnExportChat = document.getElementById("btn-export-chat");
+if (btnExportChat) {
+  btnExportChat.addEventListener("click", () => {
+    if (!state.messages || state.messages.length === 0) {
+      showToast("Start a conversation first to export it as Markdown");
+      return;
+    }
+    const activeChat = state.chats.find((c) => c.id === state.chatId);
+    const title = (activeChat && activeChat.title) || "Loki Chat Export";
+    const lines = [`# ${title}`, "", `_Exported from Loki on ${new Date().toLocaleString()}_`, ""];
+    for (const m of state.messages) {
+      if (m.role === "user") {
+        lines.push(`## You${m.timestamp ? ` (${m.timestamp})` : ""}`);
+        if (m.attached_file && m.attached_file.name) {
+          lines.push(`> Attached file: \`${m.attached_file.name}\``);
+        }
+        lines.push("", m.content || "", "");
+      } else {
+        const parts = splitThinking(m);
+        const modLabel = friendlyModel(m.model || state.selectedModel).label;
+        lines.push(`## Loki — ${modLabel}${m.timestamp ? ` (${m.timestamp})` : ""}`);
+        if (parts.thinking && parts.thinking.trim()) {
+          lines.push("", "<details><summary>Reasoning</summary>", "", parts.thinking.trim(), "", "</details>", "");
+        }
+        lines.push("", parts.answer || "", "");
+      }
+    }
+    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "loki-chat";
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${slug}.md`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    showToast(`Exported ${slug}.md to your Downloads folder`);
+  });
+}
+
+const btnBackupData = document.getElementById("btn-backup-data");
+if (btnBackupData) {
+  btnBackupData.addEventListener("click", () => {
+    const a = document.createElement("a");
+    a.href = "/api/privacy/backup";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showToast("Downloading your local Loki data backup (.zip)...");
+  });
+}
 
 // Wipe all data
 document.getElementById("btn-wipe-data").addEventListener("click", async () => {

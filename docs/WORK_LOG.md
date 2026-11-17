@@ -661,3 +661,18 @@ Append a concise entry after each completed task or meaningful implementation st
   2. `commands._run_blocking("python -c @'\nprint(21 * 2)\n'@", ...)` -> `exit_code == 0`, output `42`.
   3. `python tests/run_tests.py m9` -> `PASS m9 (1s)`, real `data/` untouched.
   4. Restarted Uvicorn server on `127.0.0.1:8420` and verified `GET /` serves `select-persona` and `app.js?v=41`.
+
+---
+
+## 2026-11-18 - Task 39: Intelligence & Workstation Upgrade Pass 3 (Long-Chat Context Compaction, Web-Grounded Version Queries, Sidebar Chat Search, Markdown Export & One-Click ZIP Backup)
+
+* **Goal**: Prevent long conversations from silently overflowing Ollama's context window, ground version/release coding questions in live web results, and add chat search, Markdown export, and one-click local ZIP backups.
+* **Files Changed**:
+  * `app/main.py` - Added `_compact_long_chat(messages, num_ctx)` (keeps the first user message and the latest 6 messages at full length while condensing older verbose middle turns when total characters exceed 72% of `num_ctx`), auto-promoted `num_ctx` to `8192` when total chat characters exceed `7500` and the model fits VRAM at 8k, fixed `web_block` attachment preserving `attached_file`, and added `GET /api/privacy/backup` returning a timestamped `loki-backup-YYYY-MM-DD_HHMM.zip` of `data/`.
+  * `app/web_decider.py` - Allowed single-line time-sensitive programming queries (`_TIME_SENSITIVE`, `< 160` chars, no code block) to trigger web search instead of staying offline.
+  * `static/index.html`, `static/app.js`, `static/styles.css` - Added `#chat-search-input` live filter above `#chat-list`, `#btn-export-chat` (`Export .md`) in `.topbar-right`, and `#btn-backup-data` (`Download backup (.zip)`) on the Privacy tab; bumped cache-busting to `styles.css?v=37` and `app.js?v=42`.
+* **Checks**:
+  1. `python -m py_compile app/main.py app/web_decider.py` -> OK.
+  2. Unit assertions on `web_decider.decide` and `_compact_long_chat` -> `CHECKS_OK`.
+  3. `python tests/run_tests.py m9` -> `PASS m9 (1s)`, real `data/` untouched.
+  4. Restarted Uvicorn on `127.0.0.1:8420` and verified `GET /api/privacy/backup` returns a valid `200 OK` ZIP archive.

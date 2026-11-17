@@ -316,6 +316,24 @@ async def stop_active_generation() -> dict[str, Any]:
     return ollama_service.stop_generation()
 
 
+def _compact_long_chat(messages: list[dict[str, Any]], num_ctx: int) -> list[dict[str, Any]]:
+    """Keep the first user message and the latest 6 messages intact while condensing verbose older middle
+    turns when the conversation approaches 72% of the context window budget."""
+    budget_chars = int(num_ctx * 0.72 * 3.3)
+    total = sum(len(str(m.get("content") or "")) for m in messages)
+    if total <= budget_chars or len(messages) <= 6:
+        return messages
+    out = [dict(m) for m in messages]
+    for i in range(1, len(out) - 6):
+        body = str(out[i].get("content") or "")
+        if len(body) > 600:
+            out[i]["content"] = body[:500] + "\n... [earlier turn condensed to preserve context window]"
+            total = sum(len(str(m.get("content") or "")) for m in out)
+            if total <= budget_chars:
+                break
+    return out
+
+
 @app.post("/api/chat/stream")
 async def stream_chat_endpoint(req: ChatRequest) -> StreamingResponse:
     """Stream chat responses with explicit model attribution and single-model concurrency."""
@@ -415,8 +433,9 @@ async def stream_chat_endpoint(req: ChatRequest) -> StreamingResponse:
         # Thinking-capable models stream their reasoning separately (shown collapsed). qwen3-vl:8b reasons
         # even with think=false (verified against Ollama 0.40.13), so streaming it at least shows progress.
         think = "thinking" in await model_capabilities(ollama_service._get_base_url(), model)
-        if (project_root or attached_file or task in ("code", "reasoning")) and num_ctx < 8192:
-            # Code, attached files and deep reasoning benefit from an 8k context when the chosen model fits the GPU at 8k.
+        total_chat_chars = sum(len(str(m.get("content") or "")) for m in req.messages)
+        if (project_root or attached_file or task in ("code", "reasoning") or total_chat_chars > 7500) and num_ctx < 8192:
+            # Code, attached files, long multi-turn chats and deep reasoning benefit from an 8k context when the model fits the GPU at 8k.
             sizes = {m["name"]: m.get("size_gb") for m in (await ollama_service.get_status()).get("installed_models", [])}
             if classify_fit(sizes.get(model), vram_total_gb(system_diagnostics.get_gpu_status()), 8192) == "fits":
                 num_ctx = 8192
@@ -523,7 +542,7 @@ async def stream_chat_endpoint(req: ChatRequest) -> StreamingResponse:
                     "the most recent information. Say so if the results do not answer it.\n\n"
                     "My question: "
                 )
-                chat_messages = [dict(m) for m in req.messages]
+                chat_messages = [dict(m) for m in chat_messages]
                 for m in reversed(chat_messages):
                     if m.get("role") == "user":
                         m["content"] = web_block + str(m.get("content", ""))
@@ -583,6 +602,7 @@ async def stream_chat_endpoint(req: ChatRequest) -> StreamingResponse:
             except Exception:
                 pass
 
+        chat_messages = _compact_long_chat(chat_messages, num_ctx)
         async for chunk in ollama_service.stream_chat(
             messages=chat_messages,
             model=model,
@@ -1086,6 +1106,36 @@ async def get_privacy_inspection() -> dict[str, Any]:
         "storage": inspect_stored_data(),
         "index": get_index_summary(),
     }
+
+
+@app.get("/api/privacy/backup")
+async def download_loki_backup() -> StreamingResponse:
+    """Create and download a local ZIP backup of the user's chats, memories, settings, schedules, and exports."""
+    import io
+    import zipfile
+    from datetime import datetime
+    from app.config import DATA_DIR, ensure_data_dir
+
+    ensure_data_dir()
+    buf = io.BytesIO()
+    skip_dirs = {"backups", "agent_runs", "__pycache__"}
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for p in sorted(DATA_DIR.rglob("*")):
+            if not p.is_file():
+                continue
+            rel = p.relative_to(DATA_DIR)
+            if any(part in skip_dirs for part in rel.parts):
+                continue
+            if p.name.endswith((".db-shm", ".db-wal")):
+                continue
+            try:
+                zf.write(p, arcname=str(rel))
+            except OSError:
+                continue
+    buf.seek(0)
+    stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+    headers = {"Content-Disposition": f'attachment; filename="loki-backup-{stamp}.zip"'}
+    return StreamingResponse(buf, media_type="application/zip", headers=headers)
 
 
 @app.post("/api/privacy/wipe")

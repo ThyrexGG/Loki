@@ -2002,3 +2002,16 @@ pre code, .md-code-block pre code {
 .btn-edit-user-msg:hover {
   color: var(--text-primary); border-color: var(--border-subtle); background: rgba(255, 255, 255, 0.05);
 }
+
+/* ---- Workstation Pass 3: Sidebar Chat Search ---- */
+.chat-search-wrap { padding: 0 10px 6px; }
+.chat-search-input {
+  width: 100%; padding: 6px 10px; border-radius: 8px;
+  border: 1px solid var(--border-subtle); background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary); font-size: 12px; outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.chat-search-input::placeholder { color: var(--text-muted); }
+.chat-search-input:focus {
+  border-color: rgba(124, 138, 255, 0.45); background: rgba(255, 255, 255, 0.055);
+}

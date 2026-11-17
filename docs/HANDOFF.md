@@ -1,6 +1,6 @@
 # Loki — Model-to-Model Handoff Brief
 
-*Last Updated: 2026-11-18 (Task 38: Workstation & Intelligence Upgrade Pass 2)*
+*Last Updated: 2026-11-18 (Task 39: Intelligence & Workstation Upgrade Pass 3)*
 
 > **AGENT CONTINUATION INSTRUCTION (MANDATORY)**
 > Before editing any code in this repository, every AI agent or coding session MUST:
@@ -41,6 +41,7 @@ Loki is a private, local-first personal assistant and workflow automation platfo
   * **Tasks 12–17 (2026-11-15)**: Default model reset to `gemma2:9b` + docs consistency; desktop app (`desktop/Loki.ps1`, Edge `--app` window, Desktop/Start Menu shortcuts, ADR-008); serpent logo/icon (`desktop/make_icon.py`); own taskbar identity `Loki.LocalAI` (`desktop/LokiShell.cs`); content-hashed icon path to beat the Windows icon cache.
   * **Task 18 (2026-11-16)**: Git repository initialised (`main`; personal `data/*`, Edge profile and logs ignored); `verify_m1`–`m8` re-run with `data/` backed up and restored (all 8 pass after fixing stale paths in m3/m4/m8; run them with the GPU free — a full-screen game causes timeouts); multi-chat history (sidebar **Chats** list, `/api/chats` API, conversations.json v2 with legacy migration).
   * **Task 20 (2026-11-16)**: VRAM-aware model ratings and default selection (`app/model_fit.py`, ADR-009); grouped model picker with warnings.
+  * **Task 39 (2026-11-18)**: Intelligence & Workstation Upgrade Pass 3 — long-chat context compaction (`_compact_long_chat`) + automatic `8k` context promotion on long threads, web-grounded programming version/release queries (`app/web_decider.py`), live sidebar chat search (`#chat-search-input`), one-click **Export `.md`** (`#btn-export-chat`), and one-click **Download backup (.zip)** (`GET /api/privacy/backup`).
   * **Task 38 (2026-11-18)**: Workstation & Intelligence Upgrade Pass 2 — drag-and-drop / attach any code, text, log, or CSV file (`<= 96 KB`) in chat, interactive **Run Python** button on `python` blocks via reviewed `#cmd-dialog`, **Edit & Resend** on user messages, **Style / Persona** selector (`Auto`, `Engineer`, `Tutor`, `Concise`, `Game Dev`), per-task expert rubrics (`TASK_PROMPTS`), and `min_p=0.05` + automatic `<= 0.2` code temperature.
   * **Task 37 (2026-11-17)**: Fixed `desktop/Loki.ps1` port-8420 startup race (`WinError 10048`), headless Edge profile lock cleanup, and foreground window activation (`desktop/LokiShell.cs`).
   * **Task 36 (2026-11-17)**: Two-pass **Refine** mode (`#chk-refine` + per-reply `Refine (2-pass)` button), per-reply **Try model…** switcher (including `qwen2.5:14b` and `phi4:14b`), conversational Auto-Memory (`"Remember that ..."`), Auto-Document Recall in chat, tuned sampling (`repeat_penalty=1.07`, `top_p=0.92`, automatic `8k` context on code/reasoning), and empty-folder `web_starter` seeding in `app/agent.py`.
