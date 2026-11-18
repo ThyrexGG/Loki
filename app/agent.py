@@ -42,11 +42,11 @@ from app.ollama_service import apply_gentle, ollama_service
 PROJECTS_HOME = Path(os.environ.get("LOKI_PROJECTS_DIR") or r"D:\LokiProjects")
 # Benchmarked 2026-11-16 (5 agent tasks x 2 rounds): qwen2.5:7b 8/10, qwen2.5-coder:7b 3/10 - the coder
 # model often writes tool calls as text, ignores instructions and loops; qwen2.5:7b uses native tool calls.
-AGENT_MODELS = ["qwen2.5:7b", "qwen2.5-coder:7b", "qwen2.5:14b", "mistral-nemo:12b"]
+AGENT_MODELS = ["qwen2.5:7b", "qwen3:8b", "qwen2.5-coder:7b", "qwen2.5:14b", "mistral-nemo:12b"]
 if os.environ.get("LOKI_AGENT_MODEL"):  # for comparing models in tests
     AGENT_MODELS.insert(0, os.environ["LOKI_AGENT_MODEL"])
 # Measured 2026-11-16: qwen2.5-coder:7b at 16k context = 5.1 GiB, fully on the 8 GB GPU.
-AGENT_NUM_CTX = {"qwen2.5-coder:7b": 16384, "qwen2.5:7b": 16384}
+AGENT_NUM_CTX = {"qwen2.5-coder:7b": 16384, "qwen2.5:7b": 16384, "qwen3:8b": 8192}
 DEFAULT_NUM_CTX = 8192
 MAX_STEPS = 24
 MODEL_TIMEOUT_S = 300
@@ -480,6 +480,34 @@ def _apply(project: str, root: Path, rel: str, content: str, guard_shrink: bool 
         return {"ok": False, "summary": "Refused: would delete most of the file", "result": (
             f"Not saved: this would shrink {rel} from {preview['old_lines']} to {preview['new_lines']} lines and delete "
             "code. To change part of a file use replace_in_file; a ```file: block must contain the whole file.")}
+    low_rel = rel.lower()
+    if low_rel.endswith(".py") and content.strip():
+        import ast
+        try:
+            ast.parse(content.replace("\r\n", "\n"), filename=rel)
+        except SyntaxError as exc:
+            bad_line = (exc.text or "").strip()
+            return {
+                "ok": False,
+                "summary": f"SyntaxError on line {exc.lineno}",
+                "result": (
+                    f"Not saved: {rel} has a Python {type(exc).__name__} on line {exc.lineno}: {exc.msg}"
+                    + (f" near `{bad_line}`." if bad_line else ".")
+                    + " Fix the syntax error and write the complete file again."
+                ),
+            }
+    elif low_rel.endswith(".json") and content.strip():
+        try:
+            json.loads(content)
+        except json.JSONDecodeError as exc:
+            return {
+                "ok": False,
+                "summary": f"Invalid JSON on line {exc.lineno}",
+                "result": (
+                    f"Not saved: {rel} has invalid JSON on line {exc.lineno}, column {exc.colno}: {exc.msg}. "
+                    "Fix the JSON syntax and write the complete file again."
+                ),
+            }
     if preview["unchanged"]:
         return {"ok": True, "result": f"{rel} already has exactly this content; nothing changed.", "summary": "No change"}
     change = project_store.apply_change(project, rel, content, preview["base_sha"])

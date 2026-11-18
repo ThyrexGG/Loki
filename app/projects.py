@@ -239,6 +239,18 @@ def preview_change(raw_root: str, rel: str, new_content: str) -> dict[str, Any]:
                         "The model may have left parts out; check before applying.")
     if re.search(r"^\s*(//|#|<!--)?\s*\.\.\.\s*(rest|existing|unchanged|remaining)", new, re.I | re.M):
         warnings.append("The new version contains a placeholder like '... rest unchanged'. Applying it would delete that code.")
+    low_rel = rel.lower()
+    if low_rel.endswith(".py") and new.strip():
+        import ast
+        try:
+            ast.parse(new, filename=rel)
+        except SyntaxError as exc:
+            warnings.append(f"Python syntax error on line {exc.lineno}: {exc.msg}.")
+    elif low_rel.endswith(".json") and new.strip():
+        try:
+            json.loads(new)
+        except json.JSONDecodeError as exc:
+            warnings.append(f"JSON syntax error on line {exc.lineno}, col {exc.colno}: {exc.msg}.")
     return {
         "path": rel, "exists": exists, "is_new": not exists, "diff": "\n".join(diff), "added": added,
         "removed": removed, "unchanged": old == new, "warnings": warnings, "base_sha": _sha(old),

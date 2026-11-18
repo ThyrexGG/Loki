@@ -894,6 +894,7 @@ document.getElementById("btn-screen").addEventListener("click", async () => {
 // Plain-language names and strengths for the models Loki knows; unknown models fall back to their tag.
 const MODEL_INFO = {
   "gemma2:9b": { name: "Gemma 2", about: "Everyday chat and writing" },
+  "qwen3:8b": { name: "Qwen 3", about: "Next-gen reasoning, coding and everyday chat" },
   "llama3:latest": { name: "Llama 3", about: "Everyday chat" },
   "qwen2.5:7b": { name: "Qwen 2.5", about: "Answers from web results, following instructions" },
   "qwen2.5-coder:7b": { name: "Qwen 2.5 Coder", about: "Writing and fixing code" },
@@ -1517,6 +1518,68 @@ function splitThinking(m) {
   return { thinking, answer: answer.replace(/^\s+/, "") };
 }
 
+// Global keyboard shortcuts: Ctrl+K (new chat), Ctrl+/ (search chats), Ctrl+Shift+E (export .md)
+document.addEventListener("keydown", (e) => {
+  if (document.querySelector("dialog[open]")) return;
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (!ctrl) return;
+  const key = (e.key || "").toLowerCase();
+  if (key === "k" && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    startNewChat();
+  } else if (e.key === "/" && !e.shiftKey && !e.altKey) {
+    const searchEl = document.getElementById("chat-search-input");
+    if (searchEl) {
+      e.preventDefault();
+      searchEl.focus();
+      searchEl.select();
+    }
+  } else if (key === "e" && e.shiftKey && !e.altKey) {
+    const expBtn = document.getElementById("btn-export-chat");
+    if (expBtn) {
+      e.preventDefault();
+      expBtn.click();
+    }
+  }
+});
+
+function buildFollowUpChips(m, answerText) {
+  const task = (m.route && m.route.task) || "";
+  if (m.agent) {
+    return [
+      "Add another feature or polish the UI",
+      "Write unit tests and run them to verify edge cases",
+      "Explain how the project files work together",
+    ];
+  }
+  if (task === "code" || /```/.test(answerText || "")) {
+    return [
+      "Write unit tests for this code",
+      "Check for edge cases or performance bottlenecks",
+      "Explain how this code works step by step",
+    ];
+  }
+  if (task === "pc") {
+    return [
+      "What should I check next if that looks normal?",
+      "Give me another read-only PowerShell diagnostic check",
+      "Summarize the most likely root cause in plain English",
+    ];
+  }
+  if (task === "reasoning") {
+    return [
+      "Verify this result using a second independent method",
+      "Show a concrete real-world example of this",
+      "Summarize the key takeaway in 3 bullet points",
+    ];
+  }
+  return [
+    "Go deeper into the technical details",
+    "Turn this into a step-by-step action checklist",
+    "Give me concrete examples",
+  ];
+}
+
 const shownMessages = new WeakSet();
 
 // Render chat messages (Claude / ChatGPT / Gemini hybrid layout)
@@ -1783,6 +1846,26 @@ function renderMessages() {
         }
 
         wrap.appendChild(footer);
+
+        const isLatestTurn = m === state.messages[state.messages.length - 1];
+        if (!state.isStreaming && isLatestTurn && parts.answer && parts.answer.length > 20) {
+          const chipsWrap = document.createElement("div");
+          chipsWrap.className = "followup-chips";
+          for (const promptText of buildFollowUpChips(m, parts.answer)) {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = "btn-followup-chip";
+            chip.textContent = promptText;
+            chip.addEventListener("click", () => {
+              if (state.isStreaming) return;
+              chatInputEl.value = promptText;
+              autoResizeChatInput();
+              document.getElementById("chat-form").requestSubmit();
+            });
+            chipsWrap.appendChild(chip);
+          }
+          wrap.appendChild(chipsWrap);
+        }
       }
 
       row.appendChild(avatar);

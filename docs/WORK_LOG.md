@@ -676,3 +676,18 @@ Append a concise entry after each completed task or meaningful implementation st
   2. Unit assertions on `web_decider.decide` and `_compact_long_chat` -> `CHECKS_OK`.
   3. `python tests/run_tests.py m9` -> `PASS m9 (1s)`, real `data/` untouched.
   4. Restarted Uvicorn on `127.0.0.1:8420` and verified `GET /api/privacy/backup` returns a valid `200 OK` ZIP archive.
+
+---
+
+## 2026-11-18 - Task 40: Workstation & Intelligence Upgrade Pass 4 (Agent Python/JSON Syntax Pre-Check, Clickable Follow-Up Chips, Keyboard Shortcuts & `qwen3:8b`)
+
+* **Goal**: Catch Python and JSON syntax errors before the Coding Agent saves broken files, add one-click contextual follow-up chips under assistant replies, add global keyboard shortcuts (`Ctrl+K`, `Ctrl+/`, `Ctrl+Shift+E`), and pull `qwen3:8b` into `D:\OllamaModels`.
+* **Files Changed**:
+  * `app/agent.py` - Added `ast.parse` (`.py`) and `json.loads` (`.json`) syntax validation in `_apply()`, refusing broken syntax and returning the exact line/column and offending line so the agent repairs it immediately; added `qwen3:8b` to `AGENT_MODELS` and `AGENT_NUM_CTX`.
+  * `app/projects.py` - Added Python `ast.parse` and JSON `json.loads` syntax warnings in `preview_change()` for the diff review dialog.
+  * `tests/verify_m9.py` - Added unit checks verifying `agent.tool_write_file` refuses broken `.py` and `.json` files with line numbers.
+  * `static/app.js`, `static/index.html`, `static/styles.css` - Added `"qwen3:8b"` to `MODEL_INFO`, added `buildFollowUpChips()` and `.followup-chips` under the latest completed assistant turn, added global keyboard shortcuts (`Ctrl+K` new chat, `Ctrl+/` focus chat search, `Ctrl+Shift+E` export `.md`), and bumped cache-busting to `styles.css?v=38` and `app.js?v=43`.
+* **Checks**:
+  1. `python -m py_compile app/agent.py app/projects.py tests/verify_m9.py` -> OK.
+  2. `python tests/run_tests.py m9` -> `PASS m9 (1s)`, real `data/` untouched.
+  3. Restarted Uvicorn on `127.0.0.1:8420` and verified `GET /` serves `app.js?v=43`.
