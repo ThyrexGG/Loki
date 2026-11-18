@@ -1325,8 +1325,23 @@ function renderChatList() {
   }
   for (const c of visibleChats) {
     const item = document.createElement("div");
-    item.className = "chat-item" + (c.id === state.chatId ? " active" : "");
+    item.className = "chat-item" + (c.id === state.chatId ? " active" : "") + (c.pinned ? " pinned" : "");
     item.title = `${c.title}\nDouble-click to rename`;
+
+    const pin = document.createElement("button");
+    pin.className = "chat-item-pin" + (c.pinned ? " is-pinned" : "");
+    pin.title = c.pinned ? "Unpin chat" : "Pin chat to top";
+    pin.setAttribute("aria-label", c.pinned ? `Unpin chat ${c.title}` : `Pin chat ${c.title}`);
+    pin.textContent = c.pinned ? "★" : "☆";
+    pin.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await fetch(`/api/chats/${encodeURIComponent(c.id)}/pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinned: !c.pinned }),
+      });
+      await loadChatList();
+    });
 
     const open = document.createElement("button");
     open.className = "chat-item-open";
@@ -1341,7 +1356,7 @@ function renderChatList() {
     del.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>`;
     del.addEventListener("click", (e) => { e.stopPropagation(); deleteChat(c); });
 
-    item.append(open, del);
+    item.append(pin, open, del);
     list.appendChild(item);
   }
 }
@@ -1469,6 +1484,42 @@ if (btnBackupData) {
     a.click();
     a.remove();
     showToast("Downloading your local Loki data backup (.zip)...");
+  });
+}
+
+const btnRestoreData = document.getElementById("btn-restore-data");
+const inputRestoreZip = document.getElementById("input-restore-zip");
+if (btnRestoreData && inputRestoreZip) {
+  btnRestoreData.addEventListener("click", () => inputRestoreZip.click());
+  inputRestoreZip.addEventListener("change", async () => {
+    const file = inputRestoreZip.files && inputRestoreZip.files[0];
+    inputRestoreZip.value = "";
+    if (!file) return;
+    if (file.size > 18 * 1024 * 1024) {
+      showToast("Backup archive is too large (> 18 MB).");
+      return;
+    }
+    const ok = await confirmDialog({
+      title: "Restore from this backup?",
+      message: `This will restore saved chats, memories, settings, schedules, and exports from "${file.name}".`,
+      confirmLabel: "Restore backup",
+    });
+    if (!ok) return;
+    const reader = new FileReader();
+    reader.onerror = () => showToast("Could not read that backup file");
+    reader.onload = async () => {
+      const dataUrl = String(reader.result || "");
+      const b64 = (dataUrl.split(",")[1] || "").trim();
+      try {
+        const res = await lokiPost("/api/privacy/restore", { zip_b64: b64 });
+        showToast(`Restored ${(res.restored_files || []).length} file(s) from backup`);
+        await loadChatList();
+        await refreshStatus();
+      } catch (err) {
+        showToast(`Restore failed: ${err.message}`);
+      }
+    };
+    reader.readAsDataURL(file);
   });
 }
 

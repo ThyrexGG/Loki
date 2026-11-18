@@ -691,3 +691,17 @@ Append a concise entry after each completed task or meaningful implementation st
   1. `python -m py_compile app/agent.py app/projects.py tests/verify_m9.py` -> OK.
   2. `python tests/run_tests.py m9` -> `PASS m9 (1s)`, real `data/` untouched.
   3. Restarted Uvicorn on `127.0.0.1:8420` and verified `GET /` serves `app.js?v=43`.
+
+---
+
+## 2026-11-18 - Task 41: Workstation & Intelligence Upgrade Pass 5 (Hybrid `qwen3:8b` Thinking Mode, Pin/Star Chats & Restore from Backup `.zip`)
+
+* **Goal**: Make `qwen3:8b` respond immediately on everyday chat while activating deep chain-of-thought on reasoning/code/refine turns, allow pinning favorite chats to the top of the sidebar, and add a safe **Restore backup (.zip)** endpoint and button on the Privacy tab.
+* **Files Changed**:
+  * `app/main.py` - Added hybrid `think` control for `qwen3:8b` (`think=True` when `task in ("reasoning", "code")` or `req.refine`, `think=False` for fast everyday replies), `POST /api/chats/{chat_id}/pin`, and `POST /api/privacy/restore` (protected by `_require_same_app`, validating ZIP entry paths against traversal and verifying JSON syntax before writing to `data/`).
+  * `app/config.py` - Added `pin_chat(chat_id, pinned)` and updated `list_chats()` to include `"pinned"` and sort pinned chats first.
+  * `static/index.html`, `static/app.js`, `static/styles.css` - Added `.chat-item-pin` (`★` / `☆`) button on sidebar chat items, added `#btn-restore-data` + `#input-restore-zip` on the Privacy tab, and bumped cache-busting to `styles.css?v=39` and `app.js?v=44`.
+  * `tests/verify_m9.py` - Added automated checks for `/api/chats/{id}/pin`, `/api/privacy/backup`, and `/api/privacy/restore` (including `403` without `X-Loki-Request`).
+* **Checks**:
+  1. `python -m py_compile app/config.py app/main.py tests/verify_m9.py` -> OK.
+  2. `python tests/run_tests.py m9` -> `PASS m9 (1s)`, real `data/` untouched.

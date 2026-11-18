@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Loki — Private Local AI</title>
   <link rel="icon" type="image/png" href="/static/loki.png?v=15" />
-  <link rel="stylesheet" href="/static/styles.css?v=38" />
+  <link rel="stylesheet" href="/static/styles.css?v=39" />
 </head>
 <body>
   <div class="app-shell">
@@ -826,7 +826,9 @@
               <p>What leaves this PC, what Loki stores, and how to remove it.</p>
             </div>
             <div class="btn-group">
+              <input type="file" id="input-restore-zip" class="hidden" accept=".zip,application/zip" />
               <button type="button" id="btn-backup-data" class="btn btn-secondary" title="Download a ZIP backup of your saved chats, memories, settings, schedules, and exports">Download backup (.zip)</button>
+              <button type="button" id="btn-restore-data" class="btn btn-secondary" title="Restore saved chats, memories, settings, schedules, and exports from a Loki backup .zip">Restore backup (.zip)</button>
               <button id="btn-wipe-data" class="btn btn-danger">Wipe all data</button>
             </div>
           </div>
@@ -1048,6 +1050,6 @@
     </div>
   </dialog>
 
-  <script src="/static/app.js?v=43"></script>
+  <script src="/static/app.js?v=44"></script>
 </body>
 </html>

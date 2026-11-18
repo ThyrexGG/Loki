@@ -175,15 +175,16 @@ def save_chat_store(store: dict[str, Any]) -> None:
 
 
 def list_chats() -> list[dict[str, Any]]:
-    """Chat summaries, most recently updated first."""
+    """Chat summaries, pinned first then most recently updated first."""
     chats = load_chat_store()["chats"]
     summaries = [({
         "id": c["id"], "title": c.get("title") or derive_chat_title(c.get("messages", [])),
         "created": c.get("created"), "updated": c.get("updated"),
         "message_count": len(c.get("messages", [])),
+        "pinned": bool(c.get("pinned", False)),
     }, i) for i, c in enumerate(chats)]
-    # Newest first; on equal timestamps (same second) the later-stored chat wins.
-    summaries.sort(key=lambda si: (si[0].get("updated") or "", si[1]), reverse=True)
+    # Pinned first, then newest first; on equal timestamps (same second) the later-stored chat wins.
+    summaries.sort(key=lambda si: (bool(si[0].get("pinned")), si[0].get("updated") or "", si[1]), reverse=True)
     return [s for s, _ in summaries]
 
 
@@ -229,6 +230,16 @@ def rename_chat(chat_id: str, title: str) -> dict[str, Any] | None:
         return None
     chat["title"] = " ".join(title.split())[:CHAT_TITLE_MAX] or derive_chat_title(chat.get("messages", []))
     chat["title_custom"] = True
+    save_chat_store(store)
+    return chat
+
+
+def pin_chat(chat_id: str, pinned: bool) -> dict[str, Any] | None:
+    store = load_chat_store()
+    chat = next((c for c in store["chats"] if c["id"] == chat_id), None)
+    if chat is None:
+        return None
+    chat["pinned"] = bool(pinned)
     save_chat_store(store)
     return chat
 

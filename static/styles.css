@@ -2029,3 +2029,13 @@ pre code, .md-code-block pre code {
   color: var(--text-primary); border-color: rgba(124, 138, 255, 0.45);
   background: rgba(124, 138, 255, 0.1);
 }
+
+/* ---- Workstation Pass 5: Pin/Star Chat Button ---- */
+.chat-item-pin {
+  flex: none; background: transparent; border: none; color: var(--text-muted);
+  font-size: 12.5px; line-height: 1; padding: 4px 5px; border-radius: 6px;
+  cursor: pointer; opacity: 0; transition: opacity 0.15s ease, color 0.15s ease;
+}
+.chat-item:hover .chat-item-pin, .chat-item-pin.is-pinned { opacity: 1; }
+.chat-item-pin.is-pinned { color: #fbbf24; }
+.chat-item-pin:hover { color: #fcd34d; }

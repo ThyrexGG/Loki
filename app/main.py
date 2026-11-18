@@ -27,6 +27,7 @@ from app.config import (
     list_chats,
     load_conversations,
     load_settings,
+    pin_chat,
     rename_chat,
     save_conversations,
     upsert_chat,
@@ -430,9 +431,14 @@ async def stream_chat_endpoint(req: ChatRequest) -> StreamingResponse:
             "reason": reason, "model": model, "selected_model": settings.get("selected_model", selected),
             "routed": routed, "note": note or vision_note,
         }
-        # Thinking-capable models stream their reasoning separately (shown collapsed). qwen3-vl:8b reasons
-        # even with think=false (verified against Ollama 0.40.13), so streaming it at least shows progress.
-        think = "thinking" in await model_capabilities(ollama_service._get_base_url(), model)
+        # Thinking-capable models stream their reasoning separately (shown collapsed). qwen3:8b supports
+        # hybrid thinking (think=True on reasoning/code/refine, think=False for fast everyday answers).
+        caps = await model_capabilities(ollama_service._get_base_url(), model)
+        if "thinking" in caps:
+            if model.startswith("qwen3:") and not model.startswith("qwen3-vl"):
+                think = bool(task in ("reasoning", "code") or req.refine)
+            else:
+                think = True
         total_chat_chars = sum(len(str(m.get("content") or "")) for m in req.messages)
         if (project_root or attached_file or task in ("code", "reasoning") or total_chat_chars > 7500) and num_ctx < 8192:
             # Code, attached files, long multi-turn chats and deep reasoning benefit from an 8k context when the model fits the GPU at 8k.
@@ -1052,6 +1058,14 @@ class RenameChatRequest(BaseModel):
     title: str
 
 
+class PinChatRequest(BaseModel):
+    pinned: bool
+
+
+class RestoreBackupRequest(BaseModel):
+    zip_b64: str = Field(max_length=25_000_000)
+
+
 @app.get("/api/chats")
 async def get_chats() -> dict[str, Any]:
     """List saved chats (summaries only), most recent first."""
@@ -1084,6 +1098,15 @@ async def rename_chat_endpoint(chat_id: str, req: RenameChatRequest) -> dict[str
     if chat is None:
         raise HTTPException(status_code=404, detail="Chat not found.")
     return {"ok": True, "id": chat["id"], "title": chat["title"]}
+
+
+@app.post("/api/chats/{chat_id}/pin")
+async def pin_chat_endpoint(chat_id: str, req: PinChatRequest) -> dict[str, Any]:
+    _check_chat_id(chat_id)
+    chat = pin_chat(chat_id, req.pinned)
+    if chat is None:
+        raise HTTPException(status_code=404, detail="Chat not found.")
+    return {"ok": True, "id": chat["id"], "pinned": bool(chat.get("pinned", False))}
 
 
 @app.delete("/api/chats/{chat_id}")
@@ -1136,6 +1159,59 @@ async def download_loki_backup() -> StreamingResponse:
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
     headers = {"Content-Disposition": f'attachment; filename="loki-backup-{stamp}.zip"'}
     return StreamingResponse(buf, media_type="application/zip", headers=headers)
+
+
+@app.post("/api/privacy/restore")
+async def restore_loki_backup(req: RestoreBackupRequest, request: Request) -> dict[str, Any]:
+    """Restore approved data files from a user-selected Loki backup ZIP archive."""
+    import base64
+    import io
+    import zipfile
+    from app.config import DATA_DIR, ensure_data_dir
+
+    _require_same_app(request)
+    ensure_data_dir()
+    try:
+        raw = base64.b64decode(req.zip_b64)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid backup archive encoding: {exc}")
+    allowed_top_files = {
+        "conversations.json", "memories.json", "settings.json", "schedules.json",
+        "workflow_runs.json", "project_changes.json", "command_log.json",
+        "activity_ledger.json", "pending_approvals.json", "index.db",
+    }
+    restored: list[str] = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw), "r") as zf:
+            for info in zf.infolist():
+                if info.is_dir() or info.file_size > 15_000_000:
+                    continue
+                norm = info.filename.replace("\\", "/").lstrip("/")
+                parts = Path(norm).parts
+                if not parts or ".." in parts or Path(norm).is_absolute():
+                    continue
+                allowed = (len(parts) == 1 and parts[0] in allowed_top_files) or (
+                    len(parts) == 2 and parts[0] == "exports" and parts[1].endswith((".md", ".csv", ".txt", ".json"))
+                )
+                if not allowed:
+                    continue
+                payload = zf.read(info.filename)
+                if norm.endswith(".json"):
+                    try:
+                        json.loads(payload.decode("utf-8"))
+                    except Exception:
+                        continue
+                dest = (DATA_DIR / norm).resolve()
+                if not str(dest).startswith(str(DATA_DIR.resolve())):
+                    continue
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(payload)
+                restored.append(norm)
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="That file is not a valid ZIP backup archive.")
+    if not restored:
+        raise HTTPException(status_code=400, detail="No recognizable Loki data files were found in that ZIP archive.")
+    return {"ok": True, "restored_files": restored}
 
 
 @app.post("/api/privacy/wipe")

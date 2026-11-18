@@ -145,8 +145,18 @@ def main() -> int:
     with httpx.Client(base_url=BASE_URL, timeout=30) as c:
         for path, body in [("/api/agent/x/decide", {"approval_id": "a", "approve": True}), ("/api/agent/x/stop", {}),
                            ("/api/agent/undo", {"change_ids": []}), ("/api/agent/preview", {"path": created}),
-                           ("/api/projects/open", {"path": created})]:
+                           ("/api/projects/open", {"path": created}), ("/api/privacy/restore", {"zip_b64": ""})]:
             check(f"{path} without the Loki header -> 403", c.post(path, json=body).status_code == 403)
+        c.put("/api/chats/testchat01", json={"messages": [{"role": "user", "content": "first"}]}).raise_for_status()
+        c.put("/api/chats/testchat02", json={"messages": [{"role": "user", "content": "second"}]}).raise_for_status()
+        c.post("/api/chats/testchat01/pin", json={"pinned": True}).raise_for_status()
+        chats_list = c.get("/api/chats").json()["chats"]
+        check("pinned chat sorted first", chats_list[0]["id"] == "testchat01" and chats_list[0]["pinned"] is True, str(chats_list))
+        import base64
+        bk = c.get("/api/privacy/backup")
+        check("backup zip downloaded", bk.status_code == 200 and len(bk.content) > 50)
+        rs = c.post("/api/privacy/restore", json={"zip_b64": base64.b64encode(bk.content).decode("ascii")}, headers=H)
+        check("backup zip restored", rs.status_code == 200 and "conversations.json" in rs.json().get("restored_files", []), rs.text)
         check("decide on an unknown run -> 404", c.post("/api/agent/nope/decide", json={"approval_id": "a", "approve": True}, headers=H).status_code == 404)
         site = proj.parent / "site-check"
         site.mkdir(exist_ok=True)
