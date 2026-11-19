@@ -755,10 +755,72 @@ function attachTextOrCodeFile(file) {
   reader.readAsText(file);
 }
 
+function isBinaryDocFile(fileOrBlob) {
+  if (!fileOrBlob) return false;
+  const name = (fileOrBlob.name || "").toLowerCase();
+  const mime = (fileOrBlob.type || "").toLowerCase();
+  return /\.(pdf|docx)$/i.test(name) || mime === "application/pdf" || mime.includes("wordprocessingml.document");
+}
+
+function attachBinaryDocFile(file) {
+  if (state.isStreaming) {
+    showToast("Wait for the current reply to finish before attaching a document");
+    return;
+  }
+  if (!file) return;
+  const maxBytes = 16 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    showToast(`Document is larger than 16 MB (${Math.round(file.size / (1024 * 1024))} MB).`);
+    return;
+  }
+  showToast(`Extracting text locally from ${file.name}...`);
+  const reader = new FileReader();
+  reader.onerror = () => showToast("Could not read that document");
+  reader.onload = async () => {
+    const dataUrl = String(reader.result || "");
+    const b64 = (dataUrl.split(",")[1] || "").trim();
+    if (!b64) {
+      showToast("Could not encode that document");
+      return;
+    }
+    try {
+      const res = await lokiPost("/api/docs/extract-attachment", {
+        filename: file.name || "document.pdf",
+        data_b64: b64,
+      });
+      state.pendingFile = {
+        name: res.name || file.name,
+        size: file.size,
+        lines: res.lines || 0,
+        pages: res.pages || null,
+        content: res.content || "",
+      };
+      const titleEl = document.getElementById("file-attachment-title");
+      const subEl = document.getElementById("file-attachment-sub");
+      const detail = res.summary_label || `${state.pendingFile.lines} lines`;
+      if (titleEl) titleEl.textContent = `${state.pendingFile.name} (${detail})`;
+      if (subEl) {
+        subEl.textContent = res.truncated
+          ? "Extracted locally on this PC (trimmed to context budget · never uploaded)."
+          : "Extracted locally on this PC (sent inside untrusted-data tags · never uploaded).";
+      }
+      const bar = document.getElementById("file-attachment");
+      if (bar) bar.classList.remove("hidden");
+      showToast(`Attached ${state.pendingFile.name} (${detail}). Ask your question, or press Send.`);
+      if (typeof chatInputEl !== "undefined" && chatInputEl) chatInputEl.focus();
+    } catch (err) {
+      showToast(err.message || "Could not extract text from that document");
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
 function handleAttachedFile(file) {
   if (!file) return;
   if (isImageFile(file)) {
     attachImageBlob(file, file.name ? `Image attached (${file.name})` : "Image attached");
+  } else if (isBinaryDocFile(file)) {
+    attachBinaryDocFile(file);
   } else {
     attachTextOrCodeFile(file);
   }
@@ -1662,8 +1724,10 @@ function renderMessages() {
       if (m.attached_file && m.attached_file.name) {
         const fBadge = document.createElement("div");
         fBadge.className = "msg-file-badge";
-        const linesTxt = m.attached_file.lines ? ` · ${m.attached_file.lines} lines` : "";
-        fBadge.textContent = `📄 ${m.attached_file.name}${linesTxt}`;
+        const detailTxt = m.attached_file.pages
+          ? ` · ${m.attached_file.pages} page${m.attached_file.pages === 1 ? "" : "s"}`
+          : (m.attached_file.lines ? ` · ${m.attached_file.lines} lines` : "");
+        fBadge.textContent = `📄 ${m.attached_file.name}${detailTxt}`;
         bubble.prepend(fBadge);
       }
       if (m.images && m.images.length) {
@@ -2338,7 +2402,9 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
     ? "What's on my screen? Explain it and help me with what I'm doing."
     : "What is in this image? Explain it and help me with what it shows.";
   const defaultFilePrompt = attachedFile
-    ? `Review ${attachedFile.name}, explain what it does, and point out any bugs or improvements.`
+    ? (/\.(pdf|docx|txt|md)$/i.test(attachedFile.name || "")
+      ? `Summarize ${attachedFile.name}, highlight the key takeaways, and answer any important questions it raises.`
+      : `Review ${attachedFile.name}, explain what it does, and point out any bugs or improvements.`)
     : "";
   const text = chatInputEl.value.trim() || (shot ? defaultImgPrompt : defaultFilePrompt);
   if (!text) return;

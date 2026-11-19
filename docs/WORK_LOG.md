@@ -705,3 +705,19 @@ Append a concise entry after each completed task or meaningful implementation st
 * **Checks**:
   1. `python -m py_compile app/config.py app/main.py tests/verify_m9.py` -> OK.
   2. `python tests/run_tests.py m9` -> `PASS m9 (1s)`, real `data/` untouched.
+
+---
+
+## 2026-11-19 - Task 42: Local `.pdf` and `.docx` Support in Chat Drag-and-Drop/Attach & Document Indexer
+
+* **Goal**: Let the user drop/attach `.pdf` and `.docx` files directly in Chat and index folders containing `.pdf` and `.docx` files in the Local Document Indexer (100% offline).
+* **Dependency Approved & Installed**: `pypdf` (`v7.1.1`, pure Python, MIT license) installed into `%LOCALAPPDATA%\Python\bin\python.exe` after explicit user approval.
+* **Files Created / Changed**:
+  * `app/doc_parser.py` (new) - Offline `.docx` (`zipfile` + `xml.etree.ElementTree`, extracting paragraphs and Markdown tables with zip-bomb guards) and `.pdf` (`pypdf.PdfReader`, extracting `--- Page X of Y ---` blocks up to 150 pages / `16 MB`, with friendly guidance on scanned image-only PDFs) plus `read_file_for_index()`.
+  * `app/indexer.py` - Added `".pdf"` and `".docx"` to `INDEXABLE_EXTENSIONS` and wired `read_file_for_index()` in `_index_single_folder()`.
+  * `app/main.py` - Added `POST /api/docs/extract-attachment` (protected by `_require_same_app`, running `extract_document_bytes` in `asyncio.to_thread` and never saving attached chat documents to disk).
+  * `static/index.html`, `static/app.js` - Expanded `#input-attach-image` `accept` and `handleAttachedFile()` with `attachBinaryDocFile()` for `.pdf` and `.docx` files, displayed page counts on `.msg-file-badge`, updated Documents tab copy, and bumped cache-busting to `app.js?v=45`.
+  * `tests/verify_m9.py` - Added automated checks for `.docx` paragraph/table extraction, `.pdf` page extraction, `403` header check on `/api/docs/extract-attachment`, and folder indexing + search of `.docx` and `.pdf` files.
+* **Checks**:
+  1. `python -m py_compile app/doc_parser.py app/indexer.py app/main.py tests/verify_m9.py` -> OK.
+  2. `python tests/run_tests.py m9` -> `PASS m9`, real `data/` untouched.

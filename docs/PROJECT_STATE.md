@@ -1,6 +1,6 @@
 # Loki — Project State
 
-*Last Updated: 2026-11-18 (through Task 41)*
+*Last Updated: 2026-11-19 (through Task 42)*
 
 ## 1. Current Milestone & Status
 
@@ -15,6 +15,7 @@
   * **Stage 6 (Task 6.1)** — Three-Switch Cloud Provider Gateway Adapters & Outbound Activity/Cost Visibility Ledger (`app/cloud_gateway.py`).
   * **Stage 7 (Task 7.1)** — Explicit Opt-In Scheduled Workflow Automation & Foreground-Priority Resource Guardrails (`app/scheduler.py`).
   * **Stage 8 (Task 8.1 & Model Upgrade)** — Upgraded local model to **`gemma2:9b`** (`9.2B` parameters, `5.4 GB`), implemented the **Natural-Language Job-to-Workflow Planner** (`app/project_tools.py`), and added three domain workflows (`game_dev_project_audit`, `folder_organization_plan`, `content_publishing_kit`).
+  * **Task 42 (Local `.pdf` & `.docx` Document Support)** - Offline `.pdf` (`pypdf`, page-numbered) and `.docx` (stdlib `zipfile` + `xml`, paragraphs & tables) extraction (`app/doc_parser.py`) across Chat drag-and-drop/attach (`POST /api/docs/extract-attachment`) and the Local Document Indexer (`app/indexer.py`).
   * **Task 41 (Workstation & Intelligence Upgrade Pass 5)** - Hybrid `qwen3:8b` thinking toggle (`think=True` on reasoning/code/refine, `think=False` on everyday chat), **Pin / Star Chats** in the left sidebar (`POST /api/chats/{id}/pin`), and **Restore backup (.zip)** (`POST /api/privacy/restore`) on the Privacy tab.
   * **Task 40 (Workstation & Intelligence Upgrade Pass 4 + `qwen3:8b`)** - Python AST & JSON syntax pre-checks in `app/agent.py` and `app/projects.py`, clickable contextual follow-up chips under assistant replies, global keyboard shortcuts (`Ctrl+K`, `Ctrl+/`, `Ctrl+Shift+E`), and `qwen3:8b` in `D:\OllamaModels`.
   * **Task 39 (Intelligence & Workstation Upgrade Pass 3)** - Long-chat context compaction (`_compact_long_chat`) + automatic `8k` context promotion on long threads, web-grounded programming version/release queries (`app/web_decider.py`), live sidebar chat search (`#chat-search-input`), one-click **Export `.md`** (`#btn-export-chat`), and one-click **Download backup (.zip)** (`GET /api/privacy/backup`).

@@ -1018,6 +1018,38 @@ async def ask_documents_endpoint(req: DocAskRequest) -> dict[str, Any]:
     )
 
 
+class ExtractAttachmentRequest(BaseModel):
+    filename: str = Field(max_length=240)
+    data_b64: str = Field(max_length=24_000_000)
+
+
+@app.post("/api/docs/extract-attachment")
+async def extract_attachment_endpoint(req: ExtractAttachmentRequest, request: Request) -> dict[str, Any]:
+    """Extract readable text locally from an attached .pdf or .docx file (ephemeral, never written to disk)."""
+    import base64
+    from app.doc_parser import DocumentParseError, extract_document_bytes
+
+    _require_same_app(request)
+    try:
+        raw = base64.b64decode(req.data_b64)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid file encoding: {exc}")
+    try:
+        parsed = await asyncio.to_thread(extract_document_bytes, req.filename, raw, 96_000)
+    except DocumentParseError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {
+        "ok": True,
+        "name": req.filename,
+        "size": len(raw),
+        "lines": parsed["lines"],
+        "pages": parsed["pages"],
+        "truncated": parsed["truncated"],
+        "summary_label": parsed["summary_label"],
+        "content": parsed["text"],
+    }
+
+
 @app.get("/api/conversations")
 async def get_conversations() -> dict[str, Any]:
     """Return locally stored conversation history."""

@@ -19,11 +19,14 @@ from app.config import (
     load_settings,
     save_settings,
 )
+from app.doc_parser import read_file_for_index
 from app.ollama_service import ollama_service
 
 INDEXABLE_EXTENSIONS = {
     ".md",
     ".txt",
+    ".pdf",
+    ".docx",
     ".py",
     ".json",
     ".csv",
@@ -212,9 +215,11 @@ class LocalDocumentIndexer:
                     continue
                 try:
                     size = item.stat().st_size
-                    if size == 0 or size > MAX_FILE_BYTES:
+                    if size == 0:
                         continue
-                    text = item.read_text(encoding="utf-8", errors="replace")
+                    text = read_file_for_index(item, max_text_bytes=MAX_FILE_BYTES)
+                    if not text:
+                        continue
                 except Exception:
                     continue
 

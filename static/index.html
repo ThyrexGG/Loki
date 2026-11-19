@@ -251,7 +251,7 @@
             <textarea
               id="chat-input"
               rows="1"
-              placeholder="Message Loki... (Paste an image or drop any code/text file)"
+              placeholder="Message Loki... (Paste an image or drop any PDF, DOCX, code, or text file)"
             ></textarea>
 
             <div class="composer-toolbar">
@@ -325,8 +325,8 @@
                 <button type="button" id="btn-stop-tts" class="btn-ghost-pill hidden" title="Stop local voice playback">
                   Stop voice
                 </button>
-                <input type="file" id="input-attach-image" accept="image/*,.txt,.md,.py,.js,.ts,.jsx,.tsx,.html,.css,.json,.csv,.yaml,.yml,.toml,.ini,.cfg,.log,.sql,.ps1,.bat,.sh,.lua,.luau,.c,.cpp,.h,.cs,.java,.go,.rs,.rb,.php,.xml" class="visually-hidden" tabindex="-1" />
-                <button type="button" id="btn-attach-image" class="btn-composer-mic" title="Attach an image or code/text/log/CSV file (or paste with Ctrl+V / drag and drop)" aria-label="Attach a file or image">
+                <input type="file" id="input-attach-image" accept="image/*,.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.txt,.md,.py,.js,.ts,.jsx,.tsx,.html,.css,.json,.csv,.yaml,.yml,.toml,.ini,.cfg,.log,.sql,.ps1,.bat,.sh,.lua,.luau,.c,.cpp,.h,.cs,.java,.go,.rs,.rb,.php,.xml" class="visually-hidden" tabindex="-1" />
+                <button type="button" id="btn-attach-image" class="btn-composer-mic" title="Attach an image, PDF, DOCX, or code/text/log/CSV file (or paste with Ctrl+V / drag and drop)" aria-label="Attach a file or image">
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <rect x="3" y="3" width="18" height="18" rx="2"></rect>
                     <circle cx="8.5" cy="8.5" r="1.5"></circle>
@@ -719,7 +719,7 @@
                 <span id="docs-pause-badge" class="status-pill st-completed">Active</span>
               </div>
               <p class="text-muted mt-8">
-                Loki only indexes folders you explicitly add below (<code>.md</code>, <code>.txt</code>, <code>.py</code>, <code>.json</code>, <code>.csv</code>, <code>.log</code>, <code>.html</code>, <code>.ps1</code>).
+                Loki only indexes folders you explicitly add below (<code>.pdf</code>, <code>.docx</code>, <code>.md</code>, <code>.txt</code>, <code>.py</code>, <code>.json</code>, <code>.csv</code>, <code>.log</code>, <code>.html</code>, <code>.ps1</code>).
               </p>
 
               <div class="form-stack mt-8">
@@ -1050,6 +1050,6 @@
     </div>
   </dialog>
 
-  <script src="/static/app.js?v=44"></script>
+  <script src="/static/app.js?v=45"></script>
 </body>
 </html>

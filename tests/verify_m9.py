@@ -145,7 +145,8 @@ def main() -> int:
     with httpx.Client(base_url=BASE_URL, timeout=30) as c:
         for path, body in [("/api/agent/x/decide", {"approval_id": "a", "approve": True}), ("/api/agent/x/stop", {}),
                            ("/api/agent/undo", {"change_ids": []}), ("/api/agent/preview", {"path": created}),
-                           ("/api/projects/open", {"path": created}), ("/api/privacy/restore", {"zip_b64": ""})]:
+                           ("/api/projects/open", {"path": created}), ("/api/privacy/restore", {"zip_b64": ""}),
+                           ("/api/docs/extract-attachment", {"filename": "a.pdf", "data_b64": ""})]:
             check(f"{path} without the Loki header -> 403", c.post(path, json=body).status_code == 403)
         c.put("/api/chats/testchat01", json={"messages": [{"role": "user", "content": "first"}]}).raise_for_status()
         c.put("/api/chats/testchat02", json={"messages": [{"role": "user", "content": "second"}]}).raise_for_status()
@@ -153,10 +154,59 @@ def main() -> int:
         chats_list = c.get("/api/chats").json()["chats"]
         check("pinned chat sorted first", chats_list[0]["id"] == "testchat01" and chats_list[0]["pinned"] is True, str(chats_list))
         import base64
+        import io
+        import zipfile
         bk = c.get("/api/privacy/backup")
         check("backup zip downloaded", bk.status_code == 200 and len(bk.content) > 50)
         rs = c.post("/api/privacy/restore", json={"zip_b64": base64.b64encode(bk.content).decode("ascii")}, headers=H)
         check("backup zip restored", rs.status_code == 200 and "conversations.json" in rs.json().get("restored_files", []), rs.text)
+
+        # .docx and .pdf local extraction + folder indexing
+        docx_buf = io.BytesIO()
+        with zipfile.ZipFile(docx_buf, "w") as zf:
+            zf.writestr("word/document.xml", (
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
+                '<w:p><w:r><w:t>Bifrost Bridge Specification</w:t></w:r></w:p>'
+                '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>Latency</w:t></w:r></w:p></w:tc>'
+                '<w:tc><w:p><w:r><w:t>4ms</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+                '</w:body></w:document>'
+            ))
+        docx_bytes = docx_buf.getvalue()
+        pdf_objs = [
+            b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+            b"4 0 obj\n<< /Length 53 >>\nstream\nBT /F1 12 Tf 72 720 Td (Fenrir Protocol Manual v2) Tj ET\nendstream\nendobj\n",
+            b"5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+        ]
+        pdf_buf = bytearray(b"%PDF-1.4\n")
+        offs = []
+        for o in pdf_objs:
+            offs.append(len(pdf_buf))
+            pdf_buf.extend(o)
+        xref = len(pdf_buf)
+        pdf_buf.extend(f"xref\n0 {len(pdf_objs)+1}\n0000000000 65535 f \n".encode())
+        for off in offs:
+            pdf_buf.extend(f"{off:010d} 00000 n \n".encode())
+        pdf_buf.extend(f"trailer\n<< /Size {len(pdf_objs)+1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
+        pdf_bytes = bytes(pdf_buf)
+
+        ex_docx = c.post("/api/docs/extract-attachment", json={"filename": "spec.docx", "data_b64": base64.b64encode(docx_bytes).decode()}, headers=H)
+        check(".docx attachment extracted", ex_docx.status_code == 200 and "Bifrost Bridge" in ex_docx.json()["content"] and "| Latency | 4ms |" in ex_docx.json()["content"], ex_docx.text)
+        ex_pdf = c.post("/api/docs/extract-attachment", json={"filename": "manual.pdf", "data_b64": base64.b64encode(pdf_bytes).decode()}, headers=H)
+        check(".pdf attachment extracted with page count", ex_pdf.status_code == 200 and ex_pdf.json()["pages"] == 1 and "Fenrir Protocol" in ex_pdf.json()["content"], ex_pdf.text)
+
+        docs_dir = proj.parent / "binary-docs-check"
+        docs_dir.mkdir(exist_ok=True)
+        (docs_dir / "spec.docx").write_bytes(docx_bytes)
+        (docs_dir / "manual.pdf").write_bytes(pdf_bytes)
+        idx_res = c.post("/api/docs/folders", json={"folder_path": str(docs_dir)}).json()
+        check(".docx and .pdf indexed in folder", idx_res.get("ok") and idx_res.get("files_indexed") == 2, str(idx_res))
+        s_pdf = c.post("/api/docs/search", json={"query": "Fenrir Protocol Manual"}).json()
+        check("indexed .pdf searchable", any("manual.pdf" in r["citation"] for r in s_pdf.get("results", [])), str(s_pdf))
+        s_docx = c.post("/api/docs/search", json={"query": "Bifrost Bridge Latency"}).json()
+        check("indexed .docx searchable", any("spec.docx" in r["citation"] for r in s_docx.get("results", [])), str(s_docx))
         check("decide on an unknown run -> 404", c.post("/api/agent/nope/decide", json={"approval_id": "a", "approve": True}, headers=H).status_code == 404)
         site = proj.parent / "site-check"
         site.mkdir(exist_ok=True)
