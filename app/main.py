@@ -1372,6 +1372,23 @@ async def stop_speaking_endpoint() -> dict[str, Any]:
     return voice_service.stop_speaking()
 
 
+class HandsFreeRequest(BaseModel):
+    enabled: bool
+
+
+@app.post("/api/voice/handsfree")
+async def handsfree_endpoint(req: HandsFreeRequest, request: Request) -> dict[str, Any]:
+    """Switch the offline "Hey Loki" listener on or off (off by default, never on after a restart)."""
+    _require_same_app(request)
+    return voice_service.start_handsfree() if req.enabled else voice_service.stop_handsfree()
+
+
+@app.get("/api/voice/handsfree/poll")
+async def handsfree_poll_endpoint(request: Request, after: int = 0) -> dict[str, Any]:
+    _require_same_app(request)
+    return voice_service.poll_handsfree(after)
+
+
 @app.get("/api/cloud/status")
 async def get_cloud_gateway_status() -> dict[str, Any]:
     """Return Three-Switch Cloud Privacy Gate settings and per-provider env key status."""

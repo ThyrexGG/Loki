@@ -220,6 +220,11 @@
         <!-- Floating Omni-Composer Dock -->
         <div class="composer-dock-wrapper">
           <!-- Prominent Active-Microphone Banner (Strictly Push-to-Talk) -->
+          <div id="hf-status" class="hf-status hidden" data-mode="off" role="status" aria-live="polite">
+            <span class="hf-wave" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            <span class="hf-text">Say &ldquo;Hey Loki&rdquo;</span>
+            <span class="hf-note">Mic open on this PC only</span>
+          </div>
           <div id="mic-active-banner" class="mic-active-banner hidden">
             <div class="mic-banner-left">
               <span class="mic-pulse-dot"></span>
@@ -336,6 +341,11 @@
                 <button type="button" id="btn-screen" class="btn-composer-mic" title="Look at my screen: takes one screenshot after 3 seconds so you can switch windows" aria-label="Look at my screen">
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <rect x="2" y="4" width="20" height="13" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line>
+                  </svg>
+                </button>
+                <button type="button" id="btn-handsfree" class="btn-composer-mic" aria-pressed="false" title="Hands-free: say &quot;Hey Loki&quot;, then your request; Loki answers out loud. Uses the offline Windows speech engine; the microphone is only open while this is on." aria-label="Hands-free voice (Hey Loki)">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 10v4"></path><path d="M7 7v10"></path><path d="M11 4v16"></path><path d="M15 8v8"></path><path d="M19 11v2"></path>
                   </svg>
                 </button>
                 <button type="button" id="btn-ptt-mic" class="btn-composer-mic" title="Local Push-to-Talk (Single utterance via Windows System.Speech — never continuous)">

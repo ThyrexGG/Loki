@@ -1242,6 +1242,107 @@ document.getElementById("btn-ptt-mic").addEventListener("click", async () => {
   }
 });
 
+// ==========================================
+// HANDS-FREE VOICE ("Hey Loki"): offline wake phrase -> request -> spoken reply
+// ==========================================
+const handsFree = { on: false, after: 0, timer: null, pendingSpeak: false };
+
+function chime(up = true) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(up ? 660 : 520, ctx.currentTime);
+    o.frequency.linearRampToValueAtTime(up ? 990 : 390, ctx.currentTime + 0.14);
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + 0.24);
+    o.onended = () => ctx.close();
+  } catch (e) { /* audio unavailable */ }
+}
+
+function setHandsFreeUi(mode) {
+  // mode: off | idle (waiting for "Hey Loki") | listening (capturing the request) | thinking
+  const btn = document.getElementById("btn-handsfree");
+  btn.classList.toggle("hf-on", mode !== "off");
+  btn.classList.toggle("hf-listening", mode === "listening");
+  btn.setAttribute("aria-pressed", mode !== "off" ? "true" : "false");
+  const pill = document.getElementById("hf-status");
+  if (pill) {
+    pill.classList.toggle("hidden", mode === "off");
+    pill.dataset.mode = mode;
+    pill.querySelector(".hf-text").textContent =
+      { idle: "Say “Hey Loki”", listening: "Listening…", thinking: "Working on it…" }[mode] || "";
+  }
+}
+
+async function pollHandsFree() {
+  if (!handsFree.on) return;
+  try {
+    const r = await fetch(`/api/voice/handsfree/poll?after=${handsFree.after}`, { headers: { "X-Loki-Request": "1" } });
+    const data = await r.json();
+    handsFree.after = data.last_seq || handsFree.after;
+    for (const ev of data.events || []) {
+      if (ev.event === "wake") { chime(true); setHandsFreeUi("listening"); }
+      else if (ev.event === "nothing") { chime(false); setHandsFreeUi("idle"); }
+      else if (ev.event === "heard" && ev.text) {
+        if (state.isStreaming) { showToast("Still answering; say it again in a moment"); setHandsFreeUi("idle"); continue; }
+        setHandsFreeUi("thinking");
+        chatInputEl.value = ev.text;
+        autoResizeChatInput();
+        handsFree.pendingSpeak = true;
+        document.getElementById("chat-form").requestSubmit();
+      } else if (ev.event === "stopped") {
+        await stopHandsFree(ev.error ? `Hands-free stopped: ${ev.error}` : "Hands-free stopped");
+        return;
+      }
+    }
+  } catch (e) { /* server busy; try again */ }
+  handsFree.timer = setTimeout(pollHandsFree, 600);
+}
+
+async function startHandsFree() {
+  try {
+    await lokiPost("/api/voice/handsfree", { enabled: true });
+  } catch (err) { showToast(`Could not start hands-free: ${err.message}`); return; }
+  handsFree.on = true;
+  handsFree.after = 0;
+  setHandsFreeUi("idle");
+  showToast("Hands-free on: say “Hey Loki”, then your request");
+  pollHandsFree();
+}
+
+async function stopHandsFree(message) {
+  handsFree.on = false;
+  handsFree.pendingSpeak = false;
+  clearTimeout(handsFree.timer);
+  try { await lokiPost("/api/voice/handsfree", { enabled: false }); } catch (e) { /* already off */ }
+  setHandsFreeUi("off");
+  if (message) showToast(message);
+}
+
+// Called when a reply finishes: speak it if it answered a hands-free request.
+async function speakHandsFreeReply(text) {
+  if (!handsFree.pendingSpeak) return;
+  handsFree.pendingSpeak = false;
+  if (handsFree.on) setHandsFreeUi("idle");
+  if (!text || !text.trim()) return;
+  try {
+    await fetch("/api/voice/speak", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
+    });
+    document.getElementById("btn-stop-tts").classList.remove("hidden");
+  } catch (e) { /* speech unavailable */ }
+}
+
+document.getElementById("btn-handsfree").addEventListener("click", () => {
+  if (handsFree.on) stopHandsFree("Hands-free off: the microphone is closed");
+  else startHandsFree();
+});
+
 document.getElementById("btn-stop-mic").addEventListener("click", async () => {
   await fetch("/api/voice/stop-listening", { method: "POST" });
   setMicBannerState(false);
@@ -2194,7 +2295,7 @@ document.getElementById("chat-stream-column").addEventListener("click", async (e
       showPreviewUrl(pv.url);
     } catch (err) { showToast(`Preview failed: ${err.message}`); }
   } else if (actionBtn.dataset.action === "open-app") {
-    const st = await fetch("/api/agent/app").then((r) => r.json()).catch(() => ({}));
+    const st = await fetch("/api/agent/app", { headers: { "X-Loki-Request": "1" } }).then((r) => r.json()).catch(() => ({}));
     if (!st.running || !a.app || st.app.id !== a.app.id) {
       a.app.stopped = true; renderMessages(); saveCurrentChat();
       showToast("That app is no longer running. Ask Loki to start it again.");
@@ -2422,6 +2523,7 @@ async function streamIntoAssistantMsg(assistantMsg, historyForApi, opts = {}) {
     }
     document.getElementById("btn-send-chat").disabled = false;
     document.getElementById("btn-stop-gen").classList.add("hidden");
+    speakHandsFreeReply(assistantMsg.content || "");
 
     if (state.saveHistory) {
       try {
