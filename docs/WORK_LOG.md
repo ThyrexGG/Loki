@@ -721,3 +721,18 @@ Append a concise entry after each completed task or meaningful implementation st
 * **Checks**:
   1. `python -m py_compile app/doc_parser.py app/indexer.py app/main.py tests/verify_m9.py` -> OK.
   2. `python tests/run_tests.py m9` -> `PASS m9`, real `data/` untouched.
+
+---
+
+## 2026-11-20 - Task 43: Smarter agent, learning memory, hands-free voice, local tools, UI 2
+
+* **Request**: "do all that plus a more advanced UX/UI": codebase awareness, plan/do/check, smarter memory, running the apps it builds, hands-free voice, local tools (game dev, files, calendar/reminders, system), optional cloud boost, and a bold UI upgrade keeping the same identity. User choices: hands-free as a toggle off by default; all four tool groups; "bold upgrade, same identity"; gentle model checks as I go.
+* **Agent** (`app/agent.py`, new `app/code_map.py`, `app/app_runner.py`): code map in the project snapshot for bigger projects and symbol-aware file picking; a JSON plan call before the loop (`agent_plan` event, checklist in the UI); one reviewer call over the changed files before finishing (problems go back to the loop once); `run_app` / `check_app` tools start the project's own server on a free port and return the HTTP response + log (servers are still refused for `run_command`).
+* **Memory** (`app/memory.py`): `learn_from_message` (regex gate, then a JSON extraction call with the chat model after the reply; `memory_learned` event with Forget), similarity merge, `PUT /api/memories/{id}`, relevance selection above 12 memories, `auto_learn_memories` setting.
+* **Voice** (`app/voice.py`, `app/voice_handsfree.ps1`): offline wake phrase via System.Speech grammar, then dictation; events polled by the UI; pause flag while TTS speaks; `POST /api/voice/handsfree`, `GET /api/voice/handsfree/poll`.
+* **Local tools** (`app/local_tools.py`): system report, largest/duplicate files, organise plan/apply/undo, reminders with a natural-language time parser and Windows toast notifications (background loop), Godot/Unity checks, chat intent detection; `/api/tools/*`.
+* **Cloud boost**: "Bigger brain" reply button using the existing three-switch gate.
+* **UI** (`static/tools.js`, `static/ui2.css`, `static/index.html`): home greeting + today line + action deck, Ctrl+K command palette (native dialog), Tools page, tool result cards in chat, reminder alert, jade nav rail, Segoe UI Variable type, slide-in sidebar under 760 px (the sidebar never collapsed before).
+* **Desktop launcher**: "Starting Loki..." splash and TCP port probes (window ~10 s instead of ~14 s cold).
+* **Checks**: new `tests/verify_m10.py` (model-free: code map, plan/review helpers, run_app start/fetch/crash, memory rules, reminders parsing + chat reply, intents, file tools with undo, Godot/Unity checks, endpoint 403s) -> PASS; `m9` -> PASS; UI checked in the browser on an isolated server (home, palette, Tools page, chat reminder card, 420 px layout, no console errors); hands-free listener started and reported ready.
+* **Not verified yet**: live model runs of the plan/review passes, `run_app` inside a real agent run, and learning from chats - the PC had only 1.5-2.1 GB RAM free, below the gentle-mode threshold, so no model was loaded. Run them when the PC is idle.

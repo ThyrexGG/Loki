@@ -23,10 +23,23 @@ The repository documentation is the shared source of truth across coding session
   * Streams answers with explicit model/provider attribution (`LOCAL • ollama / gemma2:9b • ctx 4096`), token counts, and `tok/s`.
   * Enforces a foreground single-inference lock (`asyncio.Lock`) so only one model generation runs at a time on your 8 GB GPU.
   * Includes immediate **Stop Generation** and **Unload Model (Free VRAM)** (`keep_alive: 0`) controls.
+* **Home screen, command palette and Tools page (`static/tools.js`, `static/ui2.css`)**:
+  * The home screen greets you, shows your next reminder, how busy the PC is and how much Loki knows about you, and offers one-click actions (build something, check my PC, set a reminder, talk hands-free, news, game project check).
+  * **Ctrl+K** opens a command palette for everything (new chat, agent on/off, hands-free, tools, switch model); typing a question there asks Loki.
+  * **Tools** page: reminders, what the PC is doing right now (memory, GPU, drives, top apps, startup apps), files (largest, duplicates, organise with plan / apply / undo) and Godot / Unity project checks. Narrow windows get a slide-in menu.
+* **Local tools in chat (`app/local_tools.py`)**:
+  * "Remind me Friday at 5 to ...", "in 20 minutes ...", "what reminders do I have" are answered instantly without a model; a Windows notification appears when a reminder is due (while Loki runs).
+  * "Why is my PC slow?", "biggest files in my downloads", "duplicates in D:\Photos", "organise my downloads", "check my Godot project" run the tool on this PC, show a result card, and the model explains it. Organising only moves files after you click the button, and can be undone. Windows and program folders are never scanned.
+* **Memory that learns (`app/memory.py`)**: with **Learn from chats** on (Privacy page), facts you state about yourself (setup, projects, preferences) are saved with a "Remembered: ... / Forget" note under the reply. Only your own messages are used; duplicates merge; memories can be edited; with many memories only the relevant ones go into the prompt.
+* **Hands-free voice (`app/voice.py`, `app/voice_handsfree.ps1`)**: the Hands-free button listens for "Hey Loki" with the offline Windows speech engine, takes your request and speaks the answer. Off by default and after every restart; nothing is recorded or uploaded; it pauses while Loki speaks.
+* **Bigger brain**: an optional button under replies re-asks a cloud model, only when cloud AI, a provider and its API key (environment variable) are all set up, after a confirmation that says what leaves the PC.
 * **Coding Agent (`app/agent.py`)**:
   * With **Agent** on (composer switch, on by default) and a project attached, or when you ask Loki to build something new, Loki does the work itself instead of only printing code: it reads the project, writes and edits files, runs the code or tests, reads the errors and fixes them, then summarises. New projects get their own folder under `D:\LokiProjects` (attached automatically).
   * Every step shows live under the reply (files read, diffs of each change, command output). Safe steps run by themselves; installs, deletions, git history changes, downloads and paths outside the project wait for **Run it / Skip**. Servers and admin commands are never run. **Undo all** puts every file back; **Preview** opens a project's `index.html`; **Open folder** shows it in Explorer.
   * New websites start from Loki's own designed starter (`app/web_starter/`: dark/light theme, hero, cards, stats, contact panel, scroll reveal; a colour scheme picked per project); the model writes the page content.
+  * **Plan, do, check**: for a real build or change request Loki first writes a short plan (shown as a checklist), works through it, then a reviewer pass reads the changed files and sends real problems (missing features, broken references, code that would crash) back to fix before it reports done.
+  * **Code map** (`app/code_map.py`): bigger projects get a map of which file defines which classes and functions (Python via `ast`, JS/TS, C#, GDScript by pattern), and the files matching the task are read first.
+  * **Runs the apps it builds** (`app/app_runner.py`): web apps and servers (Flask, FastAPI, Node, `npm start`) start in the background on a free localhost port; Loki requests pages, reads the response and fixes errors. **Open app** / **Stop app** in the chat; an app stops after 30 minutes, when the next one starts, or when Loki closes.
   * Uses `qwen2.5:7b` (benchmarked best for tool use on 8 GB, see ADR-016). Small local models still make mistakes: when the code's own checks fail at the end, Loki says so plainly and shows the error.
 * **Build Websites and Small Apps**:
   * Ask for a website, landing page, small app or browser game: Loki (Qwen 2.5 Coder) writes one self-contained HTML file. **Preview** runs it inside Loki in a sandbox (its own code runs, but it cannot reach the internet, your files or Loki); **Download** saves it as an `.html` file.
@@ -196,14 +209,14 @@ You can remove all stored Loki data at any time without affecting your PC or you
 ## 8. Running the Verification Tests
 
 ```powershell
-& "$env:LOCALAPPDATA\Python\bin\python.exe" tests\run_tests.py         # all 9 suites
+& "$env:LOCALAPPDATA\Python\bin\python.exe" tests\run_tests.py         # all 10 suites
 & "$env:LOCALAPPDATA\Python\bin\python.exe" tests\run_tests.py m3 m8   # selected suites
 & "$env:LOCALAPPDATA\Python\bin\python.exe" tests\run_tests.py --fast   # full speed (only when you are away from the PC)
 ```
 
 The runner starts a separate Loki server with a throwaway data folder, so your chats, memories, settings and index are never touched (it checks this and reports it). Your normal Loki can stay open.
 
-It is **gentle by default**: before each AI suite it waits until at least 4 GB of RAM and 5 GB of GPU memory are free (and says so while it waits), unloads the model and pauses after each suite, runs at below-normal priority and caps Ollama's CPU threads, so the PC stays usable. The coding-agent suite (`m9`) needs no model and runs in about 2 seconds.
+It is **gentle by default**: before each AI suite it waits until at least 4 GB of RAM and 5 GB of GPU memory are free (and says so while it waits), unloads the model and pauses after each suite, runs at below-normal priority and caps Ollama's CPU threads, so the PC stays usable. The coding-agent suites (`m9`, `m10`) need no model and run in seconds.
 
 ## 9. Troubleshooting
 

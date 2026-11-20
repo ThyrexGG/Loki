@@ -1964,6 +1964,11 @@ function renderMessages() {
         wrap.appendChild(pf);
       }
 
+      if (m.toolCard && typeof window.renderToolCard === "function") {
+        const cardEl = window.renderToolCard(m.toolCard);
+        if (cardEl) wrap.appendChild(cardEl);
+      }
+
       if (Array.isArray(m.learned) && m.learned.length > 0) {
         // Learn from chats: show what Loki just remembered, with a one-click undo.
         for (const item of m.learned) {
@@ -2476,6 +2481,9 @@ async function streamIntoAssistantMsg(assistantMsg, historyForApi, opts = {}) {
             done: true, changes: evt.changes || [], hasIndex: evt.has_index_html, seconds: evt.seconds,
             planDone: Boolean(evt.plan_done),
           });
+          renderMessages();
+        } else if (evt.type === "tool_card") {
+          assistantMsg.toolCard = evt.card;
           renderMessages();
         } else if (evt.type === "memory_learned") {
           assistantMsg.learned = evt.items || [];

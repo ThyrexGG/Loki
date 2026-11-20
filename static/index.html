@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Loki — Private Local AI</title>
   <link rel="icon" type="image/png" href="/static/loki.png?v=15" />
-  <link rel="stylesheet" href="/static/styles.css?v=39" />
+  <link rel="stylesheet" href="/static/styles.css?v=40" />
+  <link rel="stylesheet" href="/static/ui2.css?v=1" />
 </head>
 <body>
   <div class="app-shell">
@@ -61,6 +62,12 @@
             <line x1="12" y1="17" x2="12" y2="21"></line>
           </svg>
           <span>System</span>
+        </button>
+        <button class="nav-btn" data-tab="tools">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"></path>
+          </svg>
+          <span>Tools</span>
         </button>
         <button class="nav-btn" data-tab="privacy">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -176,41 +183,53 @@
               <span class="dot dot-green"></span>
               <span>Running <strong id="chat-banner-model">gemma2:9b</strong> on this PC</span>
             </div>
-            <h2 class="hero-title">What can I help with?</h2>
+            <h2 class="hero-title" id="hero-greeting">What can I help with?</h2>
             <p class="hero-subtitle">
-              Ask anything. Loki runs on this PC and looks things up online when a question needs current information.
+              Ask anything, or hand Loki a job. It runs on this PC, builds and fixes code in your projects, and checks things for you.
             </p>
 
-            <div class="quick-prompts">
-              <button class="quick-prompt-card quick-prompt-btn" data-prompt="What are the most important technology news stories this week?">
-                <div class="qp-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"></path></svg></div>
-                <div class="qp-text">
-                  <strong>Catch up on the news</strong>
-                  <span>Searches the web and cites its sources</span>
-                </div>
+            <div class="today-line" id="today-line" aria-label="Today">
+              <button type="button" class="today-item" id="today-reminder" data-goto="tools">
+                <span class="today-k">Next reminder</span><span class="today-v" id="today-reminder-v">None set</span>
               </button>
-              <button class="quick-prompt-card quick-prompt-btn" data-prompt="Summarize this page in five bullet points: ">
-                <div class="qp-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"></path><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"></path></svg></div>
-                <div class="qp-text">
-                  <strong>Summarize a link</strong>
-                  <span>Paste any article or page after the prompt</span>
-                </div>
+              <button type="button" class="today-item" id="today-pc" data-goto="status">
+                <span class="today-k">This PC</span><span class="today-v" id="today-pc-v">Checking...</span>
               </button>
-              <button class="quick-prompt-card quick-prompt-btn" data-prompt="Write a Python function that safely reads the last N lines of a large log file without loading it all into memory.">
-                <div class="qp-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="8 7 3 12 8 17"></polyline><polyline points="16 7 21 12 16 17"></polyline></svg></div>
-                <div class="qp-text">
-                  <strong>Write code</strong>
-                  <span>Python, JavaScript, PowerShell and more</span>
-                </div>
-              </button>
-              <button class="quick-prompt-card quick-prompt-btn" data-prompt="A laptop costs $1,299. It is 15% off and then 7% tax is added. What is the final price? Show the steps.">
-                <div class="qp-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19h16"></path><path d="M7 15l4-4 3 3 5-6"></path></svg></div>
-                <div class="qp-text">
-                  <strong>Solve step by step</strong>
-                  <span>Maths and logic, with the reasoning shown</span>
-                </div>
+              <button type="button" class="today-item" id="today-mem" data-goto="privacy">
+                <span class="today-k">Loki knows</span><span class="today-v" id="today-mem-v">Nothing yet</span>
               </button>
             </div>
+
+            <div class="action-deck" role="list">
+              <button type="button" class="deck-btn deck-primary" role="listitem" data-action="build"
+                      data-prompt="Build me a ">
+                <span class="deck-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 7 3 12 8 17"/><polyline points="16 7 21 12 16 17"/><line x1="13.5" y1="4" x2="10.5" y2="20"/></svg></span>
+                <span class="deck-text"><strong>Build something</strong><span>Loki plans it, writes the files, runs and checks them</span></span>
+              </button>
+              <button type="button" class="deck-btn" role="listitem" data-action="send"
+                      data-prompt="Why is my PC slow? Check what is using my memory, GPU and disk.">
+                <span class="deck-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M6 13l3-3 2 2 4-4 3 3"/></svg></span>
+                <span class="deck-text"><strong>Check my PC</strong><span>What is using memory, GPU and disk</span></span>
+              </button>
+              <button type="button" class="deck-btn" role="listitem" data-action="prefill" data-prompt="Remind me ">
+                <span class="deck-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M5 3 2 6M19 3l3 3"/></svg></span>
+                <span class="deck-text"><strong>Set a reminder</strong><span>"Remind me Friday at 5 to ..."</span></span>
+              </button>
+              <button type="button" class="deck-btn" role="listitem" data-action="handsfree">
+                <span class="deck-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4M7 7v10M11 4v16M15 8v8M19 11v2"/></svg></span>
+                <span class="deck-text"><strong>Talk hands-free</strong><span>Say "Hey Loki", hear the answer</span></span>
+              </button>
+              <button type="button" class="deck-btn" role="listitem" data-action="send"
+                      data-prompt="What are the most important technology news stories this week?">
+                <span class="deck-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span>
+                <span class="deck-text"><strong>Catch up on news</strong><span>Searches the web and cites sources</span></span>
+              </button>
+              <button type="button" class="deck-btn" role="listitem" data-action="goto" data-goto="tools">
+                <span class="deck-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="12" rx="4"/><path d="M7 13h4M9 11v4"/><circle cx="16" cy="12" r="1"/><circle cx="18" cy="14" r="1"/></svg></span>
+                <span class="deck-text"><strong>Check a game project</strong><span>Godot or Unity: missing files, slow code</span></span>
+              </button>
+            </div>
+            <p class="palette-hint">Press <kbd>Ctrl</kbd> <kbd>K</kbd> for everything Loki can do</p>
           </div>
 
           <!-- Centered Stream Column where messages render -->
@@ -828,6 +847,68 @@
       </section>
 
       <!-- TAB 5: PRIVACY & DATA -->
+      <section class="tab-panel" id="tab-tools">
+        <div class="panel-scroll tools-page">
+          <div class="section-header">
+            <div>
+              <h2>Tools</h2>
+              <p>Reminders, a look at what your PC is doing, folder clean-up and game project checks. Everything runs on this PC; you can also just ask in chat.</p>
+            </div>
+          </div>
+
+          <div class="tools-top">
+            <div class="tool-panel tool-reminders">
+              <div class="tool-head">
+                <h3>Reminders</h3>
+                <span class="tool-sub">Windows shows a notification when one is due, while Loki is running.</span>
+              </div>
+              <form class="rem-add" id="rem-add-form" autocomplete="off">
+                <input type="text" id="rem-add-input" maxlength="300" placeholder="e.g. Friday at 5 submit the build, or in 20 minutes stretch" aria-label="New reminder" />
+                <button type="submit" class="btn btn-primary">Add</button>
+              </form>
+              <ol class="rem-list" id="rem-list" aria-live="polite"></ol>
+            </div>
+
+            <div class="tool-panel tool-pc">
+              <div class="tool-head">
+                <h3>This PC right now</h3>
+                <button type="button" class="btn btn-sm btn-secondary" id="btn-tools-pc">Check again</button>
+              </div>
+              <div id="tools-pc-body" class="pc-body"><p class="tool-empty">Checking...</p></div>
+            </div>
+          </div>
+
+          <div class="tool-panel tool-files">
+            <div class="tool-head">
+              <h3>Files</h3>
+              <span class="tool-sub">Find what takes space or is duplicated. Organising shows you a plan first; nothing moves until you apply it, and you can undo it.</span>
+            </div>
+            <div class="tool-row">
+              <input type="text" id="files-folder" placeholder="Folder, e.g. C:\Users\you\Downloads" aria-label="Folder to check" />
+              <div class="seg" role="group" aria-label="What to do">
+                <button type="button" class="seg-btn" data-files="largest">Largest files</button>
+                <button type="button" class="seg-btn" data-files="duplicates">Duplicates</button>
+                <button type="button" class="seg-btn" data-files="organise">Organise</button>
+              </div>
+            </div>
+            <div class="tool-quick" id="files-quick"></div>
+            <div id="files-result" class="tool-result"></div>
+          </div>
+
+          <div class="tool-panel tool-game">
+            <div class="tool-head">
+              <h3>Game project check</h3>
+              <span class="tool-sub">Godot or Unity: broken references, scripts Unity cannot attach, per-frame lookups, oversized assets.</span>
+            </div>
+            <div class="tool-row">
+              <input type="text" id="game-folder" placeholder="Project folder, e.g. D:\Games\MyGame" aria-label="Game project folder" />
+              <button type="button" class="btn btn-primary" id="btn-game-check">Check project</button>
+            </div>
+            <div id="game-result" class="tool-result"></div>
+          </div>
+        </div>
+      </section>
+
       <section class="tab-panel" id="tab-privacy">
         <div class="panel-scroll">
           <div class="section-header">
@@ -1004,6 +1085,24 @@
   <div id="toast" class="toast hidden"></div>
 
   <!-- In-app dialog (replaces the browser's native confirm/prompt pop-ups) -->
+  <dialog id="palette" class="palette" aria-label="Command palette">
+    <div class="palette-box">
+      <div class="palette-search">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="text" id="palette-input" placeholder="Type a command, or a question to ask Loki" autocomplete="off" spellcheck="false"
+               role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list" />
+        <kbd>Esc</kbd>
+      </div>
+      <ul id="palette-list" class="palette-list" role="listbox" aria-label="Commands"></ul>
+    </div>
+  </dialog>
+
+  <div id="reminder-alert" class="reminder-alert hidden" role="alert">
+    <span class="ra-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/></svg></span>
+    <span class="ra-text"><strong>Reminder</strong><span id="reminder-alert-text"></span></span>
+    <button type="button" class="btn btn-sm btn-secondary" id="reminder-alert-done">Done</button>
+  </div>
+
   <dialog id="app-dialog" class="app-dialog" aria-labelledby="app-dialog-title" aria-describedby="app-dialog-message">
     <form method="dialog" class="app-dialog-form" id="app-dialog-form">
       <h2 id="app-dialog-title" class="app-dialog-title"></h2>
@@ -1064,6 +1163,7 @@
     </div>
   </dialog>
 
-  <script src="/static/app.js?v=45"></script>
+  <script src="/static/app.js?v=46"></script>
+  <script src="/static/tools.js?v=1"></script>
 </body>
 </html>

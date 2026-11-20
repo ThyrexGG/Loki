@@ -1,6 +1,6 @@
 # Loki — Model-to-Model Handoff Brief
 
-*Last Updated: 2026-11-19 (Task 42: Local `.pdf` & `.docx` Support in Chat and Document Indexer)*
+*Last Updated: 2026-11-20 (Task 43: smarter agent, learning memory, hands-free voice, local tools, UI 2)*
 
 > **AGENT CONTINUATION INSTRUCTION (MANDATORY)**
 > Before editing any code in this repository, every AI agent or coding session MUST:
@@ -41,6 +41,7 @@ Loki is a private, local-first personal assistant and workflow automation platfo
   * **Tasks 12–17 (2026-11-15)**: Default model reset to `gemma2:9b` + docs consistency; desktop app (`desktop/Loki.ps1`, Edge `--app` window, Desktop/Start Menu shortcuts, ADR-008); serpent logo/icon (`desktop/make_icon.py`); own taskbar identity `Loki.LocalAI` (`desktop/LokiShell.cs`); content-hashed icon path to beat the Windows icon cache.
   * **Task 18 (2026-11-16)**: Git repository initialised (`main`; personal `data/*`, Edge profile and logs ignored); `verify_m1`–`m8` re-run with `data/` backed up and restored (all 8 pass after fixing stale paths in m3/m4/m8; run them with the GPU free — a full-screen game causes timeouts); multi-chat history (sidebar **Chats** list, `/api/chats` API, conversations.json v2 with legacy migration).
   * **Task 20 (2026-11-16)**: VRAM-aware model ratings and default selection (`app/model_fit.py`, ADR-009); grouped model picker with warnings.
+  * **Task 43 (2026-11-20)**: Agent plan/review + code map + `run_app`; memory learns from chats (with Forget, editable); hands-free "Hey Loki" (off by default); local tools (reminders, system, files, Godot/Unity) in chat and on a Tools page; Bigger brain cloud button; UI 2 (home, Ctrl+K palette, `static/tools.js`, `static/ui2.css`). Model-free suite `m10`. Live model checks of the new agent passes still pending (PC was low on RAM).
   * **Task 42 (2026-11-19)**: Local `.pdf` and `.docx` support (`app/doc_parser.py` using `pypdf` + stdlib `zipfile`/`xml`) for Chat drag-and-drop/attach (`POST /api/docs/extract-attachment`) and folder indexing in `app/indexer.py`.
   * **Task 41 (2026-11-18)**: Workstation & Intelligence Upgrade Pass 5 — hybrid `qwen3:8b` thinking toggle (`think=True` on reasoning/code/refine, `think=False` on everyday chat), **Pin / Star Chats** in the left sidebar (`POST /api/chats/{id}/pin`), and **Restore backup (.zip)** (`POST /api/privacy/restore`) on the Privacy tab.
   * **Task 40 (2026-11-18)**: Workstation & Intelligence Upgrade Pass 4 — Python AST & JSON syntax pre-checks in `app/agent.py` and `app/projects.py`, clickable contextual follow-up chips under assistant replies, global keyboard shortcuts (`Ctrl+K`, `Ctrl+/`, `Ctrl+Shift+E`), and `qwen3:8b` in `D:\OllamaModels`.

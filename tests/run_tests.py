@@ -33,8 +33,8 @@ import httpx
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REAL_DATA = REPO_ROOT / "data"
-ALL_SUITES = [f"m{i}" for i in range(1, 10)]
-MODEL_FREE = {"m9"}            # suites that never call a model: no waiting needed
+ALL_SUITES = [f"m{i}" for i in range(1, 11)]
+MODEL_FREE = {"m9", "m10"}            # suites that never call a model: no waiting needed
 NEED_RAM_GB = 4.0              # free RAM before an AI suite starts
 NEED_VRAM_GB = 5.0             # free GPU memory before an AI suite starts (gemma2:9b is ~5.4 GB)
 COOLDOWN_S = 8                 # pause after each AI suite
