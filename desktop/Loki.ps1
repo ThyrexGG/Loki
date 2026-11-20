@@ -19,13 +19,59 @@ function Test-Url([string]$u, [int]$timeout = 2) {
     try { $null = Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec $timeout; return $true } catch { return $false }
 }
 
+# Fast "is anything listening?" probe. A refused HTTP request to localhost takes ~2 s on Windows;
+# this answers in well under half a second, so the launcher only does the HTTP check once the port is open.
+function Test-Port([int]$port, [int]$ms = 300) {
+    $c = New-Object System.Net.Sockets.TcpClient
+    try { return ($c.ConnectAsync('127.0.0.1', $port).Wait($ms) -and $c.Connected) } catch { return $false } finally { $c.Close() }
+}
+
+function Test-Loki { (Test-Port 8420) -and (Test-Url "$Url/static/loki.png" 3) }
+
+# Small "Starting Loki..." splash so a click on the taskbar icon gives instant feedback while the server boots.
+$script:Splash = $null
+function Show-Splash {
+    try {
+        Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+        $f = New-Object System.Windows.Forms.Form
+        $f.FormBorderStyle = 'None'; $f.StartPosition = 'CenterScreen'; $f.Size = New-Object System.Drawing.Size(320, 200)
+        $f.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 22); $f.TopMost = $true; $f.ShowInTaskbar = $false
+        $logo = Join-Path $Root 'static\loki.png'
+        if (Test-Path $logo) {
+            $pb = New-Object System.Windows.Forms.PictureBox
+            $pb.Image = [System.Drawing.Image]::FromFile($logo); $pb.SizeMode = 'Zoom'
+            $pb.Size = New-Object System.Drawing.Size(84, 84); $pb.Location = New-Object System.Drawing.Point(118, 34)
+            $f.Controls.Add($pb)
+        }
+        $lb = New-Object System.Windows.Forms.Label
+        $lb.Text = 'Starting Loki...'; $lb.ForeColor = [System.Drawing.Color]::FromArgb(225, 225, 230)
+        $lb.Font = New-Object System.Drawing.Font('Segoe UI', 11); $lb.TextAlign = 'MiddleCenter'
+        $lb.Size = New-Object System.Drawing.Size(320, 30); $lb.Location = New-Object System.Drawing.Point(0, 134)
+        $f.Controls.Add($lb)
+        $f.Show(); [System.Windows.Forms.Application]::DoEvents()
+        $script:Splash = $f
+    } catch { $script:Splash = $null }
+}
+function Close-Splash { if ($script:Splash) { try { $script:Splash.Close(); $script:Splash.Dispose() } catch {}; $script:Splash = $null } }
+# Wait while keeping the splash responsive.
+function Wait-Ui([int]$ms) {
+    $end = (Get-Date).AddMilliseconds($ms)
+    do {
+        if ($script:Splash) { [System.Windows.Forms.Application]::DoEvents() }
+        Start-Sleep -Milliseconds 50
+    } while ((Get-Date) -lt $end)
+}
+
 function Show-Error([string]$msg) {
+    Close-Splash
     Add-Type -AssemblyName PresentationFramework
     [System.Windows.MessageBox]::Show($msg, 'Loki', 'OK', 'Error') | Out-Null
 }
 
+if (-not (Test-Port 8420)) { Show-Splash }
+
 # 1. Local Ollama daemon (uses OLLAMA_MODELS if you set it, otherwise Ollama's default folder)
-if (-not (Test-Url 'http://127.0.0.1:11434/api/version' 4)) {
+if (-not ((Test-Port 11434) -and (Test-Url 'http://127.0.0.1:11434/api/version' 4))) {
     if (Test-Path $OllamaExe) {
         $env:OLLAMA_HOST = '127.0.0.1:11434'
         if (Test-Path 'D:\OllamaModels') { $env:OLLAMA_MODELS = 'D:\OllamaModels' }
@@ -35,41 +81,42 @@ if (-not (Test-Url 'http://127.0.0.1:11434/api/version' 4)) {
 
 # 2. Loki server (hidden, bound to 127.0.0.1 only)
 $server = $null
-if (-not (Test-Url "$Url/static/loki.png" 3)) {
+$ready = Test-Loki
+if (-not $ready) {
     if (-not (Test-Path $PythonExe)) { Show-Error "Python not found at $PythonExe"; exit 1 }
     # If another uvicorn is already starting up on port 8420, wait up to 12s for it before spawning a second one
     $existing = Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" -ErrorAction SilentlyContinue |
         Where-Object { $_.CommandLine -match 'uvicorn.*8420' }
     if ($existing) {
         $waitExisting = (Get-Date).AddSeconds(12)
-        while (-not (Test-Url "$Url/static/loki.png" 2) -and (Get-Date) -lt $waitExisting) {
-            Start-Sleep -Milliseconds 400
+        while (-not ($ready = Test-Loki) -and (Get-Date) -lt $waitExisting) {
+            Wait-Ui 300
         }
     }
 }
-if (-not (Test-Url "$Url/static/loki.png" 3)) {
+if (-not $ready) {
     # Stop any hung uvicorn process still holding port 8420 so bind never fails with WinError 10048
     Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" -ErrorAction SilentlyContinue |
         Where-Object { $_.CommandLine -match 'uvicorn.*8420' } |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-    Start-Sleep -Milliseconds 500
+    Wait-Ui 300
     $server = Start-Process -FilePath $PythonExe `
         -ArgumentList '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8420' `
         -WorkingDirectory $Root -NoNewWindow -PassThru `
         -RedirectStandardOutput $LogFile -RedirectStandardError "$LogFile.err"
     $deadline = (Get-Date).AddSeconds(45)
-    while (-not (Test-Url "$Url/static/loki.png" 3)) {
+    while (-not (Test-Loki)) {
         if ((Get-Date) -gt $deadline) {
             Show-Error "Loki server failed to start. See $LogFile.err"
             exit 1
         }
         if ($server.HasExited) {
-            Start-Sleep -Seconds 2
-            if (Test-Url "$Url/static/loki.png" 3) { break }
+            Wait-Ui 2000
+            if (Test-Loki) { break }
             Show-Error "Loki server failed to start. See $LogFile.err"
             exit 1
         }
-        Start-Sleep -Milliseconds 400
+        Wait-Ui 250
     }
 }
 
@@ -79,7 +126,7 @@ $browser = @(
     "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
     "$env:ProgramFiles\Google\Chrome\Application\chrome.exe"
 ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $browser) { Start-Process $Url; exit 0 }
+if (-not $browser) { Close-Splash; Start-Process $Url; exit 0 }
 
 # Clear any lingering headless/hidden Edge processes holding $AppProfile so the new window always opens visibly
 $staleEdge = Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" -ErrorAction SilentlyContinue |
@@ -116,14 +163,16 @@ try {
         if ($window.MainWindowHandle -ne [IntPtr]::Zero) {
             [LokiShell]::SetWindowAppId($window.MainWindowHandle, $AppId, $relaunch, $ico, 'Loki')
             [LokiShell]::SetWindowIcon($window.MainWindowHandle, $ico)
+            Close-Splash
             [LokiShell]::BringToFront($window.MainWindowHandle)
             break
         }
-        Start-Sleep -Milliseconds 200
+        Wait-Ui 200
     }
 } catch {
     Add-Content -Path $LogFile -Value "[desktop] could not set taskbar identity: $($_.Exception.Message)"
 }
+Close-Splash
 
 $window.WaitForExit()
 
