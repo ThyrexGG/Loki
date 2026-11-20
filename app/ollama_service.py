@@ -264,7 +264,8 @@ class OllamaService:
         2. Foreground single-inference lock (no background contention on 8 GB VRAM).
         """
         # Prepend system prompt + any user-approved memories
-        mem_context, mem_count = memory_store.get_active_memory_context()
+        last_user_text = next((str(m.get("content") or "") for m in reversed(messages) if m.get("role") == "user"), "")
+        mem_context, mem_count = memory_store.get_active_memory_context(last_user_text[-2000:])
         sys_content = system_prompt_with_date() + (f"\n\n{mem_context}" if mem_context else "")
         if extra_system:
             sys_content += f"\n\n{extra_system}"

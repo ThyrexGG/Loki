@@ -33,6 +33,7 @@ from typing import Any, AsyncIterator
 
 import httpx
 
+from app import app_runner, code_map
 from app import commands as pc_commands
 from app import projects as project_store
 from app.cloud_gateway import activity_ledger
@@ -94,6 +95,21 @@ TOOLS: list[dict[str, Any]] = [
         "parameters": {"type": "object", "properties": {
             "command": {"type": "string", "description": "PowerShell command, e.g. python main.py"}},
             "required": ["command"]}}},
+    {"type": "function", "function": {
+        "name": "run_app",
+        "description": ("Start a web app or server that keeps running (Flask, FastAPI, Node, npm start) in the background "
+                        "on a free localhost port, wait until it answers, and get the page at `path`. Use this instead of "
+                        "run_command for servers. The app keeps running so the user can open it."),
+        "parameters": {"type": "object", "properties": {
+            "command": {"type": "string", "description": "e.g. python app.py, python -m flask run, uvicorn main:app, node server.js, npm start"},
+            "path": {"type": "string", "description": "Page or API path to request once it is up, e.g. / or /api/items"}},
+            "required": ["command"]}}},
+    {"type": "function", "function": {
+        "name": "check_app",
+        "description": "Request another path from the app started with run_app (e.g. an API route) and see its latest log output.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string", "description": "Path such as /api/items"}},
+            "required": ["path"]}}},
 ]
 TOOL_NAMES = {t["function"]["name"] for t in TOOLS}
 # Whole files are NOT offered as a tool: a long file inside a JSON tool argument (HTML full of quotes and
@@ -123,8 +139,11 @@ How to work:
 Rules:
 - Use the tools one at a time. Paths are relative to the project folder.
 - Commands are PowerShell. Run Python files with "python file.py", never ".\\file.py".
-- Never start programs that keep running or wait for input (web servers, GUI windows, input() prompts,
-  watch modes). For programs that read input, test the logic with a small test instead.
+- Web apps and servers (Flask, FastAPI, Express, npm start): start them with the run_app tool, never with
+  run_command. Read the port from the PORT environment variable (default 5000) and listen on 127.0.0.1.
+  run_app tells you what the page returned; use check_app for other routes, fix and run_app again if wrong.
+- Never start GUI windows, input() prompts or watch modes. For programs that read input, test the logic
+  with a small test instead.
 - Prefer the standard library. Installing packages, deleting files and git commits need the user's approval,
   so only do that when it is really needed.
 - When tests fail, fix the code, not the tests: never delete or weaken a test unless the user asks you to.
@@ -369,15 +388,16 @@ _MKDIR_ONLY = re.compile(r"^\s*(mkdir|md|new-item\s+(-itemtype|-type)\s+director
 _ABS_PATH = re.compile(r"(?<![\w$])([a-zA-Z]:[\\/][^\s'\"|;,)]*)")
 
 
-def command_policy(command: str, root: Path) -> tuple[str, list[str]]:
+def command_policy(command: str, root: Path, allow_server: bool = False) -> tuple[str, list[str]]:
     """'auto' (run now), 'ask' (needs Approve) or 'refuse', with the reasons."""
     verdict = pc_commands.assess(command)
     if verdict["level"] == "blocked":
         return "refuse", verdict["reasons"]
     if verdict["level"] == "admin":
         return "refuse", ["Needs an administrator PowerShell, which Loki never uses."]
-    if _SERVER.search(command):
-        return "refuse", ["Starts a program that keeps running (server, window or watcher); the agent can only run commands that finish."]
+    if _SERVER.search(command) and not allow_server:
+        return "refuse", ["Starts a program that keeps running (server, window or watcher); use the run_app tool for "
+                          "web apps and servers."]
     reasons = [why for pat, why in _ASK if pat.search(command)]
     for p in _ABS_PATH.findall(command):
         try:
@@ -592,7 +612,12 @@ def project_snapshot(root: Path, task: str, budget: int = 14_000) -> tuple[str, 
     if not files:
         return "", []
     sizes = {p: p.stat().st_size for p in files}
-    chosen = sorted(files)[:15] if sum(sizes.values()) <= budget else project_store.relevant_files(root, task, limit=4)
+    small = sum(sizes.values()) <= budget
+    # Bigger projects: a code map (files -> classes/functions/imports) plus the files that match the task,
+    # so the model knows where things live without reading everything.
+    cmap = "" if small else code_map.build_map(root, budget=5000)
+    chosen = sorted(files)[:15] if small else code_map.files_for_task(root, task, limit=4)
+    budget -= len(cmap)
     parts, used, names = [], 0, []
     for p in chosen:
         try:
@@ -607,6 +632,7 @@ def project_snapshot(root: Path, task: str, budget: int = 14_000) -> tuple[str, 
         names.append(rel)
     listing = "\n".join(_rel(p, root) for p in files[:200])
     snap = (f"PROJECT FILES ({len(files)}):\n{listing}\n\n"
+            + (f"CODE MAP (what each file defines, with line numbers; read the files you need):\n{cmap}\n\n" if cmap else "")
             + (f"CURRENT CONTENT OF {', '.join(names)} (already read for you):\n<untrusted_data source=\"project\">\n"
                + "\n\n".join(parts) + "\n</untrusted_data>" if parts else ""))
     return snap, names
@@ -626,13 +652,28 @@ def _failure_hint(output: str, root: Path) -> str:
     return "".join(hints[:3])
 
 
+def _app_result_text(got: dict[str, Any], cur: dict[str, Any] | None) -> dict[str, Any]:
+    """Tool result for run_app / check_app: the HTTP answer plus the app's recent log."""
+    log = app_runner._read_log(Path(cur["log"]), 1500) if cur else ""
+    if got.get("error"):
+        head = f"Requesting {got.get('url')} failed: {got['error']}"
+    else:
+        head = (f"GET {got.get('url')} -> HTTP {got.get('status')} ({got.get('content_type') or 'no content type'}).\n"
+                f"Response:\n{got.get('body') or '(empty)'}")
+    ok = bool(got.get("ok"))
+    tail = "" if ok else "\n\nThat is an error: fix the code and start it again with run_app."
+    return {"ok": ok, "summary": f"HTTP {got.get('status')}" if got.get("status") else "No answer",
+            "output": head + (f"\n\nApp log:\n{log}" if log else ""),
+            "result": head + (f"\n\nApp log (latest):\n{log}" if log else "") + tail}
+
+
 def _command_result_text(res: dict[str, Any]) -> str:
     out = (res.get("output") or "").strip()
     if len(out) > TOOL_OUTPUT_CHARS:
         out = "... (start cut)\n" + out[-TOOL_OUTPUT_CHARS:]
     if res.get("timed_out"):
-        head = ("Timed out after 60 s and was stopped. Programs that keep running (servers, windows, watchers) "
-                "cannot be used here; test the logic with a short script or tests instead.")
+        head = ("Timed out after 60 s and was stopped. Start servers with the run_app tool instead; windows and "
+                "watchers cannot be used here, so test their logic with a short script or tests.")
     else:
         head = f"Exit code {res.get('exit_code')}."
     return f"{head}\n{out or '(no output)'}"
@@ -712,9 +753,16 @@ def _stopped(run: AgentRun) -> bool:
     return run.cancelled or ollama_service.abort_event.is_set()
 
 
-async def _call_model(run: AgentRun, model: str, messages: list[dict[str, Any]], num_ctx: int) -> dict[str, Any]:
-    payload = {"model": model, "messages": messages, "tools": OFFERED_TOOLS, "stream": False,
-               "options": {"num_ctx": num_ctx, "temperature": 0.2, "repeat_penalty": 1.07, "top_p": 0.92}}
+async def _call_model(run: AgentRun, model: str, messages: list[dict[str, Any]], num_ctx: int,
+                      tools: bool = True, fmt: str | None = None) -> dict[str, Any]:
+    payload: dict[str, Any] = {"model": model, "messages": messages, "stream": False,
+                               "options": {"num_ctx": num_ctx, "temperature": 0.2, "repeat_penalty": 1.07, "top_p": 0.92}}
+    if tools:
+        payload["tools"] = OFFERED_TOOLS
+    if fmt:
+        payload["format"] = fmt
+    if model.startswith("qwen3") and not tools:
+        payload["think"] = False  # plan / review calls want a short JSON answer, not a long reasoning trace
     async with httpx.AsyncClient(timeout=httpx.Timeout(MODEL_TIMEOUT_S, connect=5.0)) as client:
         task = asyncio.create_task(client.post(f"{ollama_service._get_base_url()}/api/chat", json=apply_gentle(payload)))
         while not task.done():
@@ -726,6 +774,61 @@ async def _call_model(run: AgentRun, model: str, messages: list[dict[str, Any]],
     if resp.status_code != 200:
         raise AgentError(f"Ollama returned HTTP {resp.status_code}: {resp.text[:300]}")
     return resp.json()
+
+
+PLAN_PROMPT = """You plan coding work for a small coding agent that works in a project folder on Windows.
+Read the request (and the project files, if shown) and reply with JSON only:
+{"steps": ["...", "..."]}
+2 to 6 short steps, each one concrete action in plain words (which file to create or change and what goes in it,
+then how to check it, e.g. "Run python -m pytest"). No code. Websites need no run step: they are checked by Loki."""
+
+REVIEW_PROMPT = """You review the changes a coding agent just made, before it tells the user it is done.
+Look only for real problems that stop the result from doing what the user asked:
+- something the user asked for that is missing,
+- code that would crash or cannot work (undefined names, wrong imports, a file referenced but never created,
+  HTML that links a script or stylesheet that does not exist),
+- logic that is plainly wrong for the request.
+Ignore style, naming, comments and nice-to-haves. Reply with JSON only:
+{"ok": true, "problems": []}  or  {"ok": false, "problems": ["short, specific problem with file and fix", ...]}
+At most 4 problems. If you are not sure something is a problem, leave it out."""
+
+
+def _parse_json_reply(data: dict[str, Any]) -> dict[str, Any]:
+    text = ((data.get("message") or {}).get("content") or "").strip()
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
+    try:
+        obj = json.loads(text)
+        return obj if isinstance(obj, dict) else {}
+    except json.JSONDecodeError:
+        objs = _json_objects(text)
+        return objs[0] if objs else {}
+
+
+def _wants_plan(task: str) -> bool:
+    """Plan real build/change requests; skip questions and one-liners ("run it", "fix the typo")."""
+    return not _is_question(task) and len(task.split()) >= 6
+
+
+def _review_material(task: str, diffs: list[tuple[str, str]], root: Path, budget: int = 9000) -> str:
+    parts, used = [], 0
+    for path, diff in reversed(diffs):  # newest change of each file first
+        if any(p.startswith(f"--- {path}\n") for p in parts):
+            continue
+        target = root / path
+        try:
+            body = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else ""
+        except OSError:
+            body = ""
+        # New / small files: show the whole file; big files: show the diff.
+        text = body if body and len(body) < 3500 else diff
+        chunk = f"--- {path}\n{text.strip()}"
+        if used + len(chunk) > budget:
+            continue
+        parts.append(chunk)
+        used += len(chunk)
+    files = "\n".join(_rel(p, root) for p in list(project_store.iter_files(root))[:60])
+    return (f"USER REQUEST:\n{task[:2000]}\n\nPROJECT FILES:\n{files}\n\nCHANGED FILES (current content or diff):\n"
+            f"<untrusted_data source=\"project\">\n" + "\n\n".join(parts) + "\n</untrusted_data>")
 
 
 def _compact_call(call: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
@@ -774,6 +877,10 @@ def _title(name: str, args: dict[str, Any]) -> str:
         return f"Editing {p}"
     if name == "run_command":
         return f"Running {str(args.get('command') or '')[:120]}"
+    if name == "run_app":
+        return f"Starting the app: {str(args.get('command') or '')[:100]}"
+    if name == "check_app":
+        return f"Opening {str(args.get('path') or '/')[:100]} in the app"
     return name
 
 
@@ -805,7 +912,7 @@ async def run_agent(
     # Only the agent instructions: Loki's chat prompt (which asks for commands the user runs) made the
     # coder model write a plan with ```powershell blocks instead of calling tools (measured 2026-11-16).
     from datetime import datetime
-    mem_context, _ = memory_store.get_active_memory_context()
+    mem_context, _ = memory_store.get_active_memory_context(next((str(m.get("content") or "") for m in reversed(messages) if m.get("role") == "user"), ""))
     system = AGENT_PROMPT.format(root=str(root)) + f"\n\nToday is {datetime.now():%A, %d %B %Y}."
     if mem_context:
         system += "\n\n" + mem_context
@@ -864,12 +971,32 @@ async def run_agent(
     last_failure: tuple[str, str] | None = None
     site_checks = 0
     seen: dict[str, int] = {}
+    diffs: list[tuple[str, str]] = []
+    reviews = 0
+    plan: list[str] = []
     final = ""
     async with ollama_service.inference_lock:
         ollama_service.abort_event.clear()
         ollama_service.is_generating = True
         ollama_service.active_model = model
         try:
+            if history[-1]["role"] == "user" and _wants_plan(last_user):
+                # Plan -> do -> check: a short plan first keeps a small model on track over many steps.
+                yield _ev({"type": "agent_status", "text": "Planning"})
+                try:
+                    pdata = await _call_model(run, model, [
+                        {"role": "system", "content": PLAN_PROMPT},
+                        {"role": "user", "content": history[-1]["content"][-7000:]}], num_ctx, tools=False, fmt="json")
+                    prompt_tokens += int(pdata.get("prompt_eval_count") or 0)
+                    eval_tokens += int(pdata.get("eval_count") or 0)
+                    raw_steps = _parse_json_reply(pdata).get("steps") or []
+                    plan = [re.sub(r"^\s*\d+[.)]\s*", "", str(s)).strip()[:200] for s in raw_steps if str(s).strip()][:6]
+                except (AgentError, httpx.HTTPError):
+                    plan = []
+                if plan:
+                    yield _ev({"type": "agent_plan", "steps": plan})
+                    history[-1]["content"] += ("\n\nYOUR PLAN (work through it step by step with the tools):\n"
+                                               + "\n".join(f"{i}. {s}" for i, s in enumerate(plan, 1)))
             while steps < MAX_STEPS:
                 if _stopped(run):
                     raise asyncio.CancelledError("stopped")
@@ -956,6 +1083,39 @@ async def run_agent(
                         nudges += 1
                         history.append({"role": "user", "content": "Continue: call the next tool, or if everything is done, give your short summary."})
                         continue
+                    if writes and diffs and reviews < 1 and last_check_ok is not False:
+                        # Check pass: a second look at the finished changes (as a reviewer, without tools) catches
+                        # missing features and broken references the agent did not test for.
+                        reviews += 1
+                        steps += 1
+                        sid = f"s{steps}"
+                        yield _ev({"type": "agent_step", "id": sid, "tool": "review", "status": "running",
+                                   "title": "Reviewing the changes"})
+                        yield _ev({"type": "agent_status", "text": "Reviewing"})
+                        problems: list[str] = []
+                        try:
+                            rdata = await _call_model(run, model, [
+                                {"role": "system", "content": REVIEW_PROMPT},
+                                {"role": "user", "content": await asyncio.to_thread(_review_material, last_user, diffs, root)}],
+                                num_ctx, tools=False, fmt="json")
+                            prompt_tokens += int(rdata.get("prompt_eval_count") or 0)
+                            eval_tokens += int(rdata.get("eval_count") or 0)
+                            verdict = _parse_json_reply(rdata)
+                            if verdict.get("ok") is False:
+                                problems = [str(p).strip()[:300] for p in (verdict.get("problems") or []) if str(p).strip()][:4]
+                        except (AgentError, httpx.HTTPError):
+                            problems = []
+                        if problems:
+                            yield _ev({"type": "agent_step_update", "id": sid, "status": "error",
+                                       "summary": f"{len(problems)} thing{'s' if len(problems) != 1 else ''} to fix",
+                                       "output": "\n".join(problems)})
+                            history.append({"role": "assistant", "content": content})
+                            history.append({"role": "user", "content": (
+                                "A reviewer looked at your changes and found:\n- " + "\n- ".join(problems) +
+                                "\nFix the ones that are real problems now with the tools (check again if there is a "
+                                "test or a way to run it), then give your short summary.")})
+                            continue
+                        yield _ev({"type": "agent_step_update", "id": sid, "status": "ok", "summary": "Looks good"})
                     final = content.strip()
                     break
 
@@ -975,7 +1135,8 @@ async def run_agent(
                     sig = name + json.dumps(args, sort_keys=True)
                     # Same read or command again with no file changed since: the model is looping (it ran the
                     # failing tests 24 times without editing anything; measured 2026-11-16).
-                    repeat = name in ("run_command", "read_file", "list_files", "search_files") and seen.get(sig) == writes
+                    repeat = name in ("run_command", "run_app", "check_app", "read_file", "list_files", "search_files") \
+                        and seen.get(sig) == writes
                     seen[sig] = writes
                     try:
                         if repeat:
@@ -993,9 +1154,19 @@ async def run_agent(
                             result = tool_write_file(run.project, root, args)
                         elif name == "replace_in_file":
                             result = tool_replace_in_file(run.project, root, args)
-                        else:  # run_command
+                        elif name == "check_app":
+                            try:
+                                got = await asyncio.to_thread(app_runner.fetch, str(args.get("path") or "/"))
+                                result = _app_result_text(got, app_runner.status())
+                            except app_runner.AppRunError as exc:
+                                result = {"ok": False, "result": f"{exc} Start it with run_app first.", "summary": str(exc)}
+                        else:  # run_command / run_app
                             command = str(args.get("command") or "").strip()
-                            decision, reasons = command_policy(command, root)
+                            decision, reasons = command_policy(command, root, allow_server=(name == "run_app"))
+                            if name == "run_app" and decision != "refuse" and not app_runner.allowed(command):
+                                decision, reasons = "refuse", [
+                                    "run_app only starts the project's own app, e.g. python app.py, python -m flask run, "
+                                    "uvicorn main:app, node server.js or npm start (one command, no ; or |)."]
                             if decision == "refuse":
                                 result = {"ok": False, "result": "Not run: " + " ".join(reasons), "summary": "Not run: " + reasons[0]}
                             else:
@@ -1018,6 +1189,29 @@ async def run_agent(
                                     result = {"ok": False, "skipped": True, "summary": "Skipped by you",
                                               "result": "The user did not approve this command, so it was not run. "
                                                         "Continue without it or explain what the user should run."}
+                                elif name == "run_app":
+                                    started = await asyncio.to_thread(app_runner.start, root, command, _PY_PRELUDE)
+                                    if started.get("ok"):
+                                        got = await asyncio.to_thread(app_runner.fetch, str(args.get("path") or "/"))
+                                        result = _app_result_text(got, app_runner.status())
+                                        yield _ev({"type": "agent_app", "url": started["url"], "app_id": started["id"],
+                                                   "command": command})
+                                    else:
+                                        why = ("It stopped right away instead of staying up to serve pages."
+                                               if started.get("exited") else
+                                               f"It did not answer on port {started.get('port')} within {app_runner.START_TIMEOUT_S} s "
+                                               "(make it read the PORT environment variable and listen on 127.0.0.1).")
+                                        out = started.get("output") or ""
+                                        result = {"ok": False, "summary": "App did not start", "output": out[-6000:],
+                                                  "result": f"The app did not start. {why}\nOutput:\n{out[-TOOL_OUTPUT_CHARS:] or '(no output)'}\n\n"
+                                                            + _failure_hint(out, root) + "Fix the code, then run_app again."}
+                                    if result.get("ok"):
+                                        failing.pop("run_app", None)
+                                    else:
+                                        failing["run_app"] = (result.get("output") or result.get("result") or "")[-1500:]
+                                    last_check_ok = not failing
+                                    last_failure = (command, failing["run_app"]) if "run_app" in failing else (
+                                        next(reversed(failing.items())) if failing else None)
                                 else:
                                     res = await pc_commands.run(command, pc_commands._token(command), cwd=str(root),
                                                                 prelude=_PY_PRELUDE)
@@ -1053,6 +1247,7 @@ async def run_agent(
                     if result.get("change"):
                         writes += 1
                         ch = result["change"]
+                        diffs.append((ch["path"], result.get("diff") or ""))
                         run.changes.append({"id": ch["id"], "path": ch["path"], "added": ch["added"],
                                             "removed": ch["removed"], "created": ch["created"]})
                     yield _ev({"type": "agent_step_update", "id": sid,
@@ -1119,6 +1314,7 @@ async def run_agent(
     has_index = (root / "index.html").is_file()
     yield _ev({"type": "agent_done", "run_id": run.id, "project": str(root), "project_name": root.name,
                "changes": run.changes, "steps": steps, "has_index_html": has_index,
+               "plan": plan, "plan_done": bool(plan) and bool(writes) and last_check_ok is not False and not run.cancelled,
                "seconds": round(time.time() - t_start, 1)})
     activity_ledger.record_entry(
         kind="chat", provider="ollama", model=model, status="completed", data_left_pc=False,

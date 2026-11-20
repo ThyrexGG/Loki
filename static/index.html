@@ -933,10 +933,14 @@
             <div class="flex-between">
               <div>
                 <h3>Memories</h3>
-                <p class="text-muted">Choose exactly what Loki remembers across chats. Toggle or remove any entry anytime.</p>
+                <p class="text-muted">What Loki knows about you. It also learns lasting facts you mention in chat (marked "Learned") and tells you each time. Edit, pause or delete anything.</p>
               </div>
               <button type="button" id="btn-clear-memories" class="btn btn-sm btn-danger">Clear All Memories</button>
             </div>
+            <label class="mem-learn-row">
+              <input type="checkbox" id="chk-auto-learn" checked />
+              <span><strong>Learn from chats</strong> <span class="text-muted">- keep facts you state about yourself (your setup, projects, preferences). Only your own messages are used; everything stays on this PC.</span></span>
+            </label>
 
             <div class="input-row mt-12">
               <select id="mem-category-select" style="width:140px;flex:none">

@@ -279,6 +279,13 @@ document.querySelectorAll(".quick-prompt-btn").forEach((btn) => {
   });
 });
 
+async function refreshMemoryCount() {
+  try {
+    const data = await fetch("/api/memories").then((r) => r.json());
+    if (Array.isArray(data.memories)) renderMemoriesTable(data.memories, data.use_memories_in_chat !== false);
+  } catch (e) { /* the next status refresh will catch up */ }
+}
+
 async function saveSettings(partial) {
   try {
     await fetch("/api/settings", {
@@ -1158,6 +1165,11 @@ document.getElementById("chk-web-access").addEventListener("change", async (e) =
     : "Web access off: Loki answers from its local models only");
 });
 
+document.getElementById("chk-auto-learn")?.addEventListener("change", async (e) => {
+  await saveSettings({ auto_learn_memories: e.target.checked });
+  showToast(e.target.checked ? "Loki will learn lasting facts you mention in chat" : "Learning from chats is off");
+});
+
 const agentChk = document.getElementById("chk-agent");
 agentChk.checked = state.agentMode;
 agentChk.addEventListener("change", (e) => {
@@ -1851,6 +1863,31 @@ function renderMessages() {
         wrap.appendChild(pf);
       }
 
+      if (Array.isArray(m.learned) && m.learned.length > 0) {
+        // Learn from chats: show what Loki just remembered, with a one-click undo.
+        for (const item of m.learned) {
+          const note = document.createElement("div");
+          note.className = `msg-learned${item.forgotten ? " forgotten" : ""}`;
+          note.innerHTML = `<span class="ml-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-6 6c0 2.2 1.2 3.6 2.3 4.6.7.6 1.2 1.4 1.2 2.4h5c0-1 .5-1.8 1.2-2.4C16.8 12.6 18 11.2 18 9a6 6 0 0 0-6-6z"/><path d="M9.5 20h5"/></svg></span>` +
+            `<span class="ml-text">${item.forgotten ? "Forgot" : "Remembered"}: ${escapeHtml(item.content)}</span>`;
+          if (!item.forgotten) {
+            const undo = document.createElement("button");
+            undo.type = "button";
+            undo.className = "ml-undo";
+            undo.textContent = "Forget";
+            undo.addEventListener("click", async () => {
+              try { await fetch(`/api/memories/${encodeURIComponent(item.id)}`, { method: "DELETE" }); } catch (e) { /* ignore */ }
+              item.forgotten = true;
+              renderMessages();
+              saveCurrentChat();
+              refreshMemoryCount();
+            });
+            note.appendChild(undo);
+          }
+          wrap.appendChild(note);
+        }
+      }
+
       if (Array.isArray(m.sources) && m.sources.length > 0) {
         const src = document.createElement("div");
         src.className = "msg-sources";
@@ -2025,6 +2062,16 @@ function renderAgentPanel(m, isLive) {
       : `<span class="agent-meta">${toolSteps.length} step${toolSteps.length === 1 ? "" : "s"}${a.seconds ? " · " + formatSecs(a.seconds) : ""}</span>`);
   panel.appendChild(head);
 
+  if (a.plan && a.plan.length) {
+    // Plan -> do -> check: the agent's own short plan, ticked off when the run finishes cleanly.
+    const plan = document.createElement("div");
+    plan.className = `agent-plan${a.done && a.planDone ? " done" : ""}`;
+    plan.innerHTML = `<div class="agent-plan-head">Plan</div><ol>` +
+      a.plan.map((p) => `<li><span class="ap-box" aria-hidden="true"></span><span>${escapeHtml(p)}</span></li>`).join("") +
+      `</ol>`;
+    panel.appendChild(plan);
+  }
+
   if (a.steps.length) {
     const list = document.createElement("ol");
     list.className = "agent-steps";
@@ -2089,7 +2136,11 @@ function renderAgentPanel(m, isLive) {
       b.textContent = label;
       bar.appendChild(b);
     };
-    if (a.hasIndex && !a.undone) btn("Preview", "btn-primary", "preview");
+    if (a.app && !a.app.stopped && !a.undone) {
+      btn("Open app", "btn-primary", "open-app");
+      btn("Stop app", "btn-secondary", "stop-app");
+    }
+    if (a.hasIndex && !a.undone && !(a.app && !a.app.stopped)) btn("Preview", "btn-primary", "preview");
     btn("Open folder", "btn-secondary", "open");
     if (changed.length && !a.undone) btn("Undo all", "btn-secondary", "undo");
     panel.appendChild(bar);
@@ -2142,6 +2193,18 @@ document.getElementById("chat-stream-column").addEventListener("click", async (e
       const pv = await lokiPost("/api/agent/preview", { path: a.project });
       showPreviewUrl(pv.url);
     } catch (err) { showToast(`Preview failed: ${err.message}`); }
+  } else if (actionBtn.dataset.action === "open-app") {
+    const st = await fetch("/api/agent/app").then((r) => r.json()).catch(() => ({}));
+    if (!st.running || !a.app || st.app.id !== a.app.id) {
+      a.app.stopped = true; renderMessages(); saveCurrentChat();
+      showToast("That app is no longer running. Ask Loki to start it again.");
+      return;
+    }
+    window.open(a.app.url, "_blank", "noopener");
+  } else if (actionBtn.dataset.action === "stop-app") {
+    try { await lokiPost("/api/agent/app/stop", { app_id: a.app.id }); } catch (err) { /* already stopped */ }
+    a.app.stopped = true; renderMessages(); saveCurrentChat();
+    showToast("App stopped");
   } else if (actionBtn.dataset.action === "open") {
     try { await lokiPost("/api/projects/open", { path: a.project }); }
     catch (err) { showToast(`Could not open the folder: ${err.message}`); }
@@ -2274,6 +2337,12 @@ async function streamIntoAssistantMsg(assistantMsg, historyForApi, opts = {}) {
         } else if (evt.type === "agent_status" && assistantMsg.agent) {
           assistantMsg.agent.status = evt.text;
           renderMessages();
+        } else if (evt.type === "agent_app" && assistantMsg.agent) {
+          assistantMsg.agent.app = { id: evt.app_id, url: evt.url, command: evt.command };
+          renderMessages();
+        } else if (evt.type === "agent_plan" && assistantMsg.agent) {
+          assistantMsg.agent.plan = evt.steps || [];
+          renderMessages();
         } else if (evt.type === "agent_note" && assistantMsg.agent) {
           assistantMsg.agent.steps.push({ kind: "note", text: evt.text });
           renderMessages();
@@ -2296,8 +2365,13 @@ async function streamIntoAssistantMsg(assistantMsg, historyForApi, opts = {}) {
         } else if (evt.type === "agent_done" && assistantMsg.agent) {
           Object.assign(assistantMsg.agent, {
             done: true, changes: evt.changes || [], hasIndex: evt.has_index_html, seconds: evt.seconds,
+            planDone: Boolean(evt.plan_done),
           });
           renderMessages();
+        } else if (evt.type === "memory_learned") {
+          assistantMsg.learned = evt.items || [];
+          renderMessages();
+          refreshMemoryCount();
         } else if (evt.type === "web_status") {
           assistantMsg.webStatus = evt.message;
           renderMessages();
@@ -3221,6 +3295,8 @@ async function refreshStatus() {
       webChk.checked = settings.web_access !== false;
       document.getElementById("web-access-state").textContent = webChk.checked ? "On" : "Off";
     }
+    const learnChk = document.getElementById("chk-auto-learn");
+    if (learnChk && document.activeElement !== learnChk) learnChk.checked = settings.auto_learn_memories !== false;
     const webOn = settings.web_access !== false;
     document.getElementById("privacy-pill-detail").textContent = webOn ? "AI on this PC \u00b7 Web search on" : "AI on this PC \u00b7 Offline";
     document.getElementById("composer-footnote-text").textContent = webOn
@@ -3537,8 +3613,9 @@ function renderMemoriesTable(memories, useMemoriesInChat) {
 
   for (const m of state.memories) {
     const tr = document.createElement("tr");
+    tr.dataset.memId = m.memory_id;
     tr.innerHTML = `
-      <td><span class="cite-pill">${escapeHtml(m.category || "personal")}</span></td>
+      <td><span class="cite-pill">${escapeHtml(m.category || "personal")}</span>${m.source === "auto" ? '<span class="mem-learned" title="Loki learned this from your chat">Learned</span>' : ""}</td>
       <td><strong>${escapeHtml(m.title || "")}</strong></td>
       <td>${escapeHtml(m.content || "")}</td>
       <td>
@@ -3550,6 +3627,7 @@ function renderMemoriesTable(memories, useMemoriesInChat) {
         <button class="btn btn-sm btn-secondary btn-toggle-mem" data-mem-id="${escapeHtml(m.memory_id)}" data-enabled="${m.enabled ? "true" : "false"}">
           ${m.enabled ? "Pause" : "Enable"}
         </button>
+        <button class="btn btn-sm btn-secondary btn-edit-mem" data-mem-id="${escapeHtml(m.memory_id)}">Edit</button>
         <button class="btn btn-sm btn-danger btn-del-mem" data-mem-id="${escapeHtml(m.memory_id)}">
           Delete
         </button>
@@ -3572,6 +3650,38 @@ function renderMemoriesTable(memories, useMemoriesInChat) {
         renderMemoriesTable(data.memories, state.useMemoriesInChat);
         showToast(!currentlyEnabled ? "Memory enabled for chat" : "Memory paused");
       }
+    });
+  });
+
+  tbody.querySelectorAll(".btn-edit-mem").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tr = btn.closest("tr");
+      const m = state.memories.find((x) => x.memory_id === btn.dataset.memId);
+      if (!tr || !m) return;
+      const cats = ["personal", "project", "preference", "workflow"];
+      tr.classList.add("mem-editing");
+      tr.innerHTML = `
+        <td><select class="mem-edit-cat">${cats.map((c) => `<option value="${c}"${c === m.category ? " selected" : ""}>${c}</option>`).join("")}</select></td>
+        <td><input type="text" class="mem-edit-title" maxlength="120" value="${escapeHtml(m.title || "")}" /></td>
+        <td colspan="2"><textarea class="mem-edit-content" rows="2" maxlength="1200">${escapeHtml(m.content || "")}</textarea></td>
+        <td><button class="btn btn-sm btn-primary mem-edit-save">Save</button>
+            <button class="btn btn-sm btn-secondary mem-edit-cancel">Cancel</button></td>`;
+      tr.querySelector(".mem-edit-title").focus();
+      tr.querySelector(".mem-edit-cancel").addEventListener("click", () => renderMemoriesTable(state.memories, state.useMemoriesInChat));
+      tr.querySelector(".mem-edit-save").addEventListener("click", async () => {
+        const body = {
+          title: tr.querySelector(".mem-edit-title").value,
+          content: tr.querySelector(".mem-edit-content").value,
+          category: tr.querySelector(".mem-edit-cat").value,
+        };
+        const resp = await fetch(`/api/memories/${encodeURIComponent(m.memory_id)}`, {
+          method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.ok) { showToast(`Could not save: ${data.detail || "error"}`); return; }
+        renderMemoriesTable(data.memories, state.useMemoriesInChat);
+        showToast("Memory updated");
+      });
     });
   });
 

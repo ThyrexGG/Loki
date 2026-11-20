@@ -50,6 +50,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "temperature": 0.3,
     "save_chat_history": True,
     "use_memories_in_chat": True,
+    "auto_learn_memories": True,  # Loki keeps lasting facts the user states about themself (shown + undoable)
     "auto_model_routing": True,  # pick a specialist model per task (ADR-010)
     "web_access": True,  # search the web / read pasted links automatically (ADR-011)
     "selected_tts_voice": "Microsoft Zira Desktop",

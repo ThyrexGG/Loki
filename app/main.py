@@ -38,6 +38,7 @@ from app.config import (
 from app.diagnostics import system_diagnostics
 from app.indexer import document_indexer, get_index_summary
 from app.memory import memory_store
+from app.memory import wants_learning as memory_wants_learning
 from app.model_fit import annotate_models, pick_default_model
 from app.model_router import ROUTES, choose_model, classify_conversation, model_capabilities
 from app.web_decider import decide as decide_web
@@ -133,6 +134,7 @@ class SettingsUpdateRequest(BaseModel):
     save_chat_history: bool | None = None
     use_memories_in_chat: bool | None = None
     selected_tts_voice: str | None = None
+    auto_learn_memories: bool | None = None
     auto_model_routing: bool | None = None
     web_access: bool | None = None
 
@@ -202,6 +204,12 @@ class MemoryCreateRequest(BaseModel):
 
 class MemoryToggleRequest(BaseModel):
     enabled: bool
+
+
+class MemoryUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=200)
+    content: str | None = Field(default=None, max_length=2000)
+    category: str | None = None
 
 
 class VoiceListenRequest(BaseModel):
@@ -293,6 +301,8 @@ async def update_user_settings(req: SettingsUpdateRequest) -> dict[str, Any]:
         settings["auto_model_routing"] = bool(req.auto_model_routing)
     if req.web_access is not None:
         settings["web_access"] = bool(req.web_access)
+    if req.auto_learn_memories is not None:
+        settings["auto_learn_memories"] = bool(req.auto_learn_memories)
     save_settings(settings)
     return {"ok": True, "settings": settings}
 
@@ -622,6 +632,14 @@ async def stream_chat_endpoint(req: ChatRequest) -> StreamingResponse:
         ):
             yield chunk
 
+        # Learn from chats: after the reply, keep lasting facts the user stated about themself (their own words
+        # only, never attached files / web pages), and tell them in the chat so they can undo it.
+        if req.provider == "ollama" and not has_screenshot and not attached_file and memory_wants_learning(last_user_raw):
+            learned = await memory_store.learn_from_message(last_user_raw, model)
+            if learned:
+                yield json.dumps({"type": "memory_learned", "items": [
+                    {"id": m["memory_id"], "title": m["title"], "content": m["content"]} for m in learned]}) + "\n"
+
     return StreamingResponse(with_route(), media_type="application/x-ndjson")
 
 
@@ -713,6 +731,26 @@ async def agent_decide(run_id: str, req: AgentDecisionRequest, request: Request)
 async def agent_stop(run_id: str, request: Request) -> dict[str, Any]:
     _require_same_app(request)
     return {"ok": agent_mod.stop(run_id)}
+
+
+@app.get("/api/agent/app")
+async def agent_app_status(request: Request) -> dict[str, Any]:
+    """The app the coding agent started with run_app, if it is still running."""
+    _require_same_app(request)
+    from app import app_runner
+    cur = app_runner.status()
+    return {"running": bool(cur), "app": {k: cur[k] for k in ("id", "url", "command", "port")} if cur else None}
+
+
+class AgentAppStopRequest(BaseModel):
+    app_id: str | None = Field(default=None, max_length=32)
+
+
+@app.post("/api/agent/app/stop")
+async def agent_app_stop(req: AgentAppStopRequest, request: Request) -> dict[str, Any]:
+    _require_same_app(request)
+    from app import app_runner
+    return {"ok": app_runner.stop(req.app_id)}
 
 
 @app.post("/api/agent/undo")
@@ -1278,6 +1316,15 @@ async def toggle_memory_endpoint(
 ) -> dict[str, Any]:
     """Enable or disable a specific stored memory."""
     res = memory_store.toggle_memory(memory_id, req.enabled)
+    if not res.get("ok"):
+        raise HTTPException(status_code=404, detail=res.get("error", "Memory not found."))
+    return res
+
+
+@app.put("/api/memories/{memory_id}")
+async def update_memory_endpoint(memory_id: str, req: MemoryUpdateRequest) -> dict[str, Any]:
+    """Edit a stored memory's title, text or category."""
+    res = memory_store.update_memory(memory_id, req.title, req.content, req.category)
     if not res.get("ok"):
         raise HTTPException(status_code=404, detail=res.get("error", "Memory not found."))
     return res
