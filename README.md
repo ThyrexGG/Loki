@@ -56,7 +56,7 @@ The repository documentation is the shared source of truth across coding session
   * Proposed changes appear as `file:path` blocks with **Review change**: a diff with warnings (for example when a change would delete most of a file). Nothing is written until you click Apply; the old version is backed up in `data/backups/`, the change is logged in `data/project_changes.json`, and **Undo** restores it (refused if you edited the file afterwards).
 * **Web Search & Links (`app/web_tools.py`, `app/web_decider.py`)**:
   * Loki decides automatically when to go online: pasted links are read; time-sensitive questions (latest, news, prices, dates, scores, releases), explicit requests ("search ...", "look up ...") and who/when/where questions about named things are searched. Code, maths, creative writing and small talk stay offline.
-  * Uses DuckDuckGo (no account or API key), reads the top 3 pages, and answers with inline citations [1], [2] plus a **Sources** list under the reply. Web-backed answers use `qwen2.5:7b` when Auto model is on.
+  * Uses DuckDuckGo, or Yahoo when DuckDuckGo is busy (no account or API key), reads the top 3 pages, and answers with inline citations [1], [2] plus a **Sources** list under the reply. Web-backed answers use `qwen2.5:7b` when Auto model is on.
   * Turn it off under **Privacy & Data > Web search & links**.
 * **Auto Model (per-task routing, `app/model_router.py`)**:
   * With **Auto model** on (composer chip, default on), code questions go to `qwen2.5-coder:7b`, maths / logic / step-by-step questions to `deepseek-r1:8b`, and everything else to the model you picked. Only models that fit the 8 GB GPU are used; otherwise your picked model answers.
@@ -185,7 +185,7 @@ Loki **never** stores files in `%APPDATA%`, the Windows Registry, or outside the
 ## 6. Privacy Behavior & Security Boundaries
 
 * **Localhost Server**: Loki binds exclusively to `127.0.0.1:8420`; AI runs on the local Ollama at `http://127.0.0.1:11434`.
-* **Web Access (on by default, switch on Privacy & Data)**: when a question needs current information, or you paste a link, the Loki server searches DuckDuckGo and/or reads the page. Only the search text or link leaves this PC; chats, files, memories and the AI itself stay local. Pages on this PC or your home network are never fetched, page text is treated as untrusted, and every lookup is listed in the Activity Ledger.
+* **Web Access (on by default, switch on Privacy & Data)**: when a question needs current information, or you paste a link, the Loki server searches DuckDuckGo (Yahoo when DuckDuckGo is busy) and/or reads the page. Only the search text or link leaves this PC; chats, files, memories and the AI itself stay local. Pages on this PC or your home network are never fetched, page text is treated as untrusted, and every lookup is listed in the Activity Ledger.
 * **Strict Browser CSP**: HTTP headers enforce `Content-Security-Policy: default-src 'self'; connect-src 'self'`, preventing the browser UI from making any external network requests.
 * **Cloud Provider Gate**: Cloud providers (ChatGPT, Claude, Gemini) are **hard-disabled** by default in both configuration and the backend router.
 * **Untrusted Data Framing**: Document contents and logs are treated as passive, untrusted data. System prompts instruct the model never to follow instructions found inside files or logs.

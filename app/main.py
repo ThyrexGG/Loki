@@ -735,7 +735,7 @@ async def stream_chat_endpoint(req: ChatRequest) -> StreamingResponse:
                 yield json.dumps({"type": "web_status", "message": f"Web search unavailable ({exc or 'timed out'}). Answering offline."}) + "\n"
             activity_ledger.record_entry(
                 kind="web_read" if web_plan["mode"] == "read" else "web_search",
-                provider="duckduckgo" if web_plan["mode"] == "search" else "web",
+                provider="web search (DuckDuckGo / Yahoo)" if web_plan["mode"] == "search" else "web",
                 model=model, status="completed" if sources else "failed", data_left_pc=True,
                 bytes_sent_external=len((web_plan.get("query") or " ".join(web_plan.get("urls", []))).encode("utf-8")),
                 detail=(f"Web search: {web_plan['query']}" if web_plan["mode"] == "search" else f"Read link(s): {', '.join(web_plan['urls'])}")

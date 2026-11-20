@@ -1,13 +1,16 @@
 """Web search and page reading for Loki chat (ADR-011).
 
-- Search: DuckDuckGo's plain HTML results page (no API key, no account).
+- Search: DuckDuckGo's plain HTML results page (no API key, no account). When DuckDuckGo is busy (it answers
+  HTTP 202 to rate-limit automated searches) or returns nothing, Yahoo's results page is used instead
+  (Bing was tried and returned unrelated results to automated searches).
 - Read: fetches a public http(s) page and extracts readable text.
 
 Safety boundaries:
 - Only public internet hosts: loopback, private, link-local, reserved and multicast addresses are
   refused (also after every redirect), so a page or prompt can never make Loki read this PC or the
   home network (e.g. http://127.0.0.1:8420/... or a router admin page).
-- Ports 80/443 only, http/https only, GET only, no cookies, generic User-Agent (nothing identifying).
+- Ports 80/443 only, http/https only, GET only, generic User-Agent (nothing identifying). No cookies are kept:
+  a search engine's cookie lives only for that one search.
 - Size cap (1.5 MB download, ~2,500 chars kept per page) and short timeouts.
 - Returned text is always treated as UNTRUSTED data by the caller (wrapped in <untrusted_data>).
 """
@@ -26,6 +29,7 @@ from bs4 import BeautifulSoup
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 SEARCH_URL = "https://html.duckduckgo.com/html/"
+YAHOO_URL = "https://search.yahoo.com/search"
 MAX_DOWNLOAD_BYTES = 1_500_000
 PAGE_CHARS = 2500
 TIMEOUT = httpx.Timeout(10.0, connect=5.0)
@@ -132,18 +136,76 @@ def parse_search_results(html: str, limit: int) -> list[dict[str, str]]:
     return results
 
 
+def _yahoo_target(href: str) -> str | None:
+    """Yahoo wraps results in r.search.yahoo.com/.../RU=<url-encoded real URL>/RK=..."""
+    m = re.search(r"/RU=([^/]+)/R[KS]=", href)
+    if m:
+        href = unquote(m.group(1))
+    if not href.startswith(("http://", "https://")):
+        return None
+    host = urlparse(href).netloc
+    if host.endswith(("yahoo.com", "bing.com", "yimg.com")):
+        return None
+    return href
+
+
+def parse_yahoo_results(html: str, limit: int) -> list[dict[str, str]]:
+    soup = BeautifulSoup(html, "lxml")
+    results: list[dict[str, str]] = []
+    # Organic results only: ads live in the searchCenterTop / searchCenterBottom lists.
+    for block in soup.select("ol.searchCenterMiddle div.algo"):
+        title_el = block.select_one("h3.title") or block.select_one("h3")
+        a = title_el.find_parent("a") if title_el else None
+        a = a or block.select_one("h3 a")
+        if not title_el or not a or not a.get("href"):
+            continue
+        url = _yahoo_target(a["href"])
+        if not url or any(r["url"] == url for r in results):
+            continue
+        snippet_el = block.select_one(".compText p") or block.select_one(".compText")
+        results.append({"title": " ".join(title_el.get_text(" ").split())[:160], "url": url,
+                        "snippet": " ".join(snippet_el.get_text(" ").split())[:400] if snippet_el else ""})
+        if len(results) >= limit:
+            break
+    return results
+
+
+async def _search_duckduckgo(query: str, limit: int) -> list[dict[str, str]]:
+    async with _client() as client:
+        resp = await client.post(SEARCH_URL, data={"q": query, "kl": "wt-wt"})
+    if resp.status_code != 200:
+        raise WebError(f"DuckDuckGo returned HTTP {resp.status_code}")
+    return parse_search_results(resp.text, limit)
+
+
+async def _search_yahoo(query: str, limit: int) -> list[dict[str, str]]:
+    async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True,
+                                 headers={"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.8"}) as client:
+        resp = await client.get(YAHOO_URL, params={"p": query})
+    if resp.status_code != 200:
+        raise WebError(f"Yahoo returned HTTP {resp.status_code}")
+    return parse_yahoo_results(resp.text, limit)
+
+
 async def search(query: str, limit: int = 5) -> list[dict[str, str]]:
+    """DuckDuckGo first; Yahoo when DuckDuckGo is busy or finds nothing."""
     query = " ".join(query.split())[:200]
     if not query:
         return []
-    async with _client() as client:
+    problems: list[str] = []
+    for engine in (_search_duckduckgo, _search_yahoo):
         try:
-            resp = await client.post(SEARCH_URL, data={"q": query, "kl": "wt-wt"})
+            results = await engine(query, limit)
         except httpx.HTTPError as exc:
-            raise WebError(f"Search failed: {exc.__class__.__name__}") from exc
-    if resp.status_code != 200:
-        raise WebError(f"Search returned HTTP {resp.status_code}.")
-    return parse_search_results(resp.text, limit)
+            problems.append(f"{engine.__name__[8:]}: {exc.__class__.__name__}")
+            continue
+        except WebError as exc:
+            problems.append(str(exc))
+            continue
+        if results:
+            return results
+        problems.append(f"{engine.__name__[8:]}: no results")
+    raise WebError("Search engines are not answering right now (" + "; ".join(problems) + ")")
 
 
 # ---------------------------------------------------------------------------
