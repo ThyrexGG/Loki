@@ -2095,6 +2095,14 @@ function renderMessages() {
               });
               footer.appendChild(retrySelect);
             }
+
+            const boostBtn = document.createElement("button");
+            boostBtn.type = "button";
+            boostBtn.className = "btn-copy-turn btn-boost";
+            boostBtn.title = "Ask a bigger cloud model (off by default; you confirm each time, and it uses your own API key)";
+            boostBtn.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg> Bigger brain';
+            boostBtn.addEventListener("click", () => askBiggerBrain(m));
+            footer.appendChild(boostBtn);
           }
         }
 
@@ -2376,8 +2384,8 @@ async function streamIntoAssistantMsg(assistantMsg, historyForApi, opts = {}) {
         model: chosenModel,
         num_ctx: state.numCtx,
         temperature: state.temperature,
-        provider: "ollama",
-        cloud_request_opt_in: false,
+        provider: opts.provider || "ollama",
+        cloud_request_opt_in: Boolean(opts.provider && opts.cloudOptIn),
         auto_route: useAutoRoute,
         project: state.project || null,
         agent: useAgent,
@@ -2541,6 +2549,38 @@ async function streamIntoAssistantMsg(assistantMsg, historyForApi, opts = {}) {
   }
 }
 
+// Optional cloud boost: re-ask with a bigger cloud model. Needs all three privacy switches + an API key
+// in an environment variable; the user confirms every request and sees what leaves the PC.
+async function askBiggerBrain(assistantMsg) {
+  if (state.isStreaming) return;
+  let cg = null;
+  try { cg = await fetch("/api/cloud/status").then((r) => r.json()); } catch (e) { cg = null; }
+  const provs = cg ? Object.values(cg.providers || {}) : [];
+  const ready = provs.filter((p) => p.enabled && p.api_key_in_env);
+  if (!cg || !cg.cloud_global_opt_in || !ready.length) {
+    const missing = !cg || !cg.cloud_global_opt_in ? "Cloud AI is off (that is the default)."
+      : !provs.some((p) => p.enabled) ? "No cloud provider is switched on."
+      : "No API key found for the provider you switched on.";
+    const go = await confirmDialog({
+      title: "Set up Bigger brain",
+      message: `${missing} To use it: on the Privacy page, allow cloud AI and switch on a provider, then set its API key as a Windows environment variable (for example ANTHROPIC_API_KEY) and restart Loki. Keys are never stored by Loki. API use is billed by the provider.`,
+      confirmLabel: "Open Privacy",
+    });
+    if (go) document.querySelector('.nav-btn[data-tab="privacy"]').click();
+    return;
+  }
+  const prov = ready[0];
+  const idx = state.messages.indexOf(assistantMsg);
+  const turns = state.messages.slice(0, idx).length;
+  const ok = await confirmDialog({
+    title: `Ask ${prov.display_name}?`,
+    message: `This sends this chat (${turns} message${turns === 1 ? "" : "s"}) and your saved memories to ${prov.display_name} (${prov.default_model}) over the internet. It is billed to your API account. Nothing else leaves your PC.`,
+    confirmLabel: "Send to cloud",
+  });
+  if (!ok) return;
+  retryAssistantTurn(assistantMsg, { model: prov.default_model, provider: prov.id, cloudOptIn: true, autoRoute: false, refine: false });
+}
+
 async function retryAssistantTurn(assistantMsg, opts = {}) {
   if (state.isStreaming) return;
   const idx = state.messages.indexOf(assistantMsg);
@@ -2558,7 +2598,8 @@ async function retryAssistantTurn(assistantMsg, opts = {}) {
   assistantMsg.thinking = "";
   assistantMsg.thinkingOpen = undefined;
   assistantMsg.sources = [];
-  assistantMsg.webStatus = opts.refine ? "Pass 1/2: Drafting & self-checking..." : `Re-running with ${friendlyModel(chosenModel).label}...`;
+  assistantMsg.webStatus = opts.refine ? "Pass 1/2: Drafting & self-checking..."
+    : opts.provider ? `Asking ${chosenModel} in the cloud...` : `Re-running with ${friendlyModel(chosenModel).label}...`;
   assistantMsg.model = chosenModel;
   assistantMsg.refined = Boolean(opts.refine);
   assistantMsg.route = null;
