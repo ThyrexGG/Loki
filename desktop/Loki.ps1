@@ -143,6 +143,16 @@ if ($staleEdge) {
     }
 }
 
+# Fresh UI after every Loki update: clear the app window's page cache when no Loki window is open
+# (an old cached index.html kept showing the previous UI). Settings, sign-ins and storage are kept.
+$profileInUse = Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match [regex]::Escape($AppProfile) }
+if (-not $profileInUse) {
+    foreach ($d in 'Cache', 'Code Cache') {
+        Remove-Item -LiteralPath (Join-Path $AppProfile "Default\$d") -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 $window = Start-Process -FilePath $browser -WindowStyle Normal -PassThru -ArgumentList @(
     "--app=$Url", "--user-data-dir=`"$AppProfile`"", '--window-size=1320,880',
     '--no-first-run', '--no-default-browser-check', '--disable-sync'

@@ -266,3 +266,40 @@ kbd {
   .composer-pills { flex: 1 1 100%; min-width: 0; }
   .composer-buttons { margin-left: auto; }
 }
+
+/* ---------- Composer switches: drawn toggles instead of native (emoji-looking) checkboxes ---------- */
+.composer-chip.checkbox-chip { gap: 8px; cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
+.composer-chip.checkbox-chip input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; flex: none; margin: 0; width: 22px; height: 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.10); position: relative; cursor: pointer; transition: background .15s;
+}
+.composer-chip.checkbox-chip input[type="checkbox"]::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--text-muted); transition: transform .15s, background .15s;
+}
+.composer-chip.checkbox-chip input[type="checkbox"]:checked { background: rgba(52, 211, 153, 0.35); }
+.composer-chip.checkbox-chip input[type="checkbox"]:checked::after { transform: translateX(10px); background: var(--jade); }
+.composer-chip.checkbox-chip:has(input:checked) { color: var(--text-primary); }
+.composer-chip.checkbox-chip:has(input:focus-visible) { outline: 2px solid var(--jade); outline-offset: 2px; }
+.project-chip { font-size: inherit; font-family: var(--font-sans); }
+.composer-chip, .project-chip { font-size: 12.5px; }
+@media (prefers-reduced-motion: reduce) {
+  .composer-chip.checkbox-chip input[type="checkbox"], .composer-chip.checkbox-chip input[type="checkbox"]::after { transition: none; }
+}
+
+/* ---------- Home fits on one screen: 3 x 2 action deck, tighter vertical rhythm ---------- */
+#chat-empty-state { padding-top: 2vh; padding-bottom: 8px; }
+#chat-empty-state .hero-logo { width: 48px; height: 48px; margin-bottom: 12px; }
+#chat-empty-state .hero-badge { margin-bottom: 12px; }
+#chat-empty-state .hero-title { font-size: clamp(2.1rem, 4vw, 3rem); margin-bottom: 8px; }
+#chat-empty-state .hero-subtitle { margin-bottom: 18px; }
+.today-line { margin-bottom: 18px; }
+.today-item { padding-top: 10px; padding-bottom: 10px; }
+.deck-btn.deck-primary { grid-row: auto; flex-direction: row; justify-content: flex-start; padding: 14px; }
+.deck-primary .deck-icon { width: 34px; height: 34px; }
+.deck-primary .deck-text strong { font-size: 16px; }
+.deck-btn { padding: 13px 14px; }
+.palette-hint { margin-top: 12px; }
+@media (max-height: 820px) {
+  #chat-empty-state .hero-logo, #chat-empty-state .hero-badge { display: none; }
+}
