@@ -1692,5 +1692,6 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 @app.get("/")
 async def serve_index() -> FileResponse:
-    """Serve the local Loki web UI."""
-    return FileResponse(str(STATIC_DIR / "index.html"))
+    """Serve the local Loki web UI. no-cache: the desktop window must re-check the page on every start, or it
+    keeps showing an old UI after an update (the CSS/JS files are versioned with ?v= and may be cached)."""
+    return FileResponse(str(STATIC_DIR / "index.html"), headers={"Cache-Control": "no-cache"})
