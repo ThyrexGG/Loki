@@ -1809,10 +1809,27 @@ function buildFollowUpChips(m, answerText) {
 const shownMessages = new WeakSet();
 
 // Render chat messages (Claude / ChatGPT / Gemini hybrid layout)
+// Follow a streaming reply only while the user is at the bottom; once they scroll up to read, stay put.
+const chatViewportEl = document.getElementById("chat-messages");
+state.stickToBottom = true;
+state._setScrollTop = null;
+chatViewportEl.addEventListener("scroll", () => {
+  // Ignore the scroll events caused by Loki's own re-render (they land exactly where it put the view).
+  if (state._setScrollTop !== null && Math.abs(chatViewportEl.scrollTop - state._setScrollTop) < 2) return;
+  state._setScrollTop = null;
+  state.stickToBottom = chatViewportEl.scrollHeight - chatViewportEl.scrollTop - chatViewportEl.clientHeight < 80;
+}, { passive: true });
+
 function renderMessages() {
   const viewport = document.getElementById("chat-messages");
   const column = document.getElementById("chat-stream-column");
   const emptyState = document.getElementById("chat-empty-state");
+  if (state._renderedMessages !== state.messages) {
+    // Another chat was opened or a new one started: start at its latest message.
+    state._renderedMessages = state.messages;
+    state.stickToBottom = true;
+  }
+  const keepTop = viewport.scrollTop;
 
   column.innerHTML = "";
 
@@ -2141,7 +2158,8 @@ function renderMessages() {
 
     column.appendChild(turn);
   }
-  viewport.scrollTop = viewport.scrollHeight;
+  viewport.scrollTop = state.stickToBottom ? viewport.scrollHeight : keepTop;
+  state._setScrollTop = viewport.scrollTop;
 }
 
 // ==========================================
@@ -2619,6 +2637,7 @@ async function retryAssistantTurn(assistantMsg, opts = {}) {
 // Submit chat prompt
 document.getElementById("chat-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  state.stickToBottom = true;
   if (state.isStreaming) return;
 
   const shot = state.pendingScreenshot;

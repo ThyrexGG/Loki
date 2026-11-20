@@ -1,0 +1,51 @@
+/* Compact composer (static/composer.js): one row like a modern chat app. */
+.composer-toolbar.cc-compact { flex-wrap: nowrap; align-items: center; gap: 8px; }
+.cc-compact .composer-pills { flex: 1 1 auto; flex-wrap: nowrap; align-items: center; gap: 6px; min-width: 0; }
+.cc-compact .composer-buttons { flex: none; gap: 2px; align-items: center; margin-left: auto; }
+.cc-moved { display: none !important; }
+.cc-compact .composer-pills > .composer-chip,
+.cc-compact .project-chip { height: 32px; padding: 0 12px; border-radius: 999px; font-size: 12.5px; }
+.cc-compact .project-chip-wrap { min-width: 0; }
+.cc-compact .project-chip { max-width: 220px; }
+.cc-compact .project-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.cc-compact .btn-composer-mic, .cc-icon-btn {
+  width: 34px; height: 34px; border-radius: 50%; border: 0; background: transparent; color: var(--text-secondary);
+  display: inline-grid; place-items: center; cursor: pointer; position: relative; transition: background .15s, color .15s;
+}
+.cc-compact .btn-composer-mic:hover, .cc-icon-btn:hover, .cc-icon-btn[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.07); color: var(--text-primary);
+}
+.cc-icon-btn:focus-visible, .cc-compact .btn-composer-mic:focus-visible { outline: 2px solid var(--jade); outline-offset: 1px; }
+#cc-plus { border: 1px solid var(--line); }
+.cc-dot { position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--jade); }
+.cc-dot.hidden { display: none; }
+
+.cc-pop-wrap { position: relative; flex: none; }
+.cc-pop {
+  position: absolute; bottom: calc(100% + 10px); z-index: 30; background: #1b1f28; border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px; box-shadow: 0 18px 50px rgba(0, 0, 0, .5); padding: 6px; animation: palIn .14s ease;
+}
+.cc-pop.hidden { display: none; }
+.cc-menu { left: 0; min-width: 220px; }
+.cc-menu button {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 9px; background: none;
+  color: var(--text-primary); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+}
+.cc-menu button svg { color: var(--text-secondary); }
+.cc-menu button:hover, .cc-menu button:focus-visible { background: rgba(255, 255, 255, 0.06); outline: none; }
+
+.cc-options { right: 0; width: 260px; padding: 6px; }
+.cc-opt-head { font-size: 11.5px; color: var(--text-muted); padding: 8px 8px 4px; }
+.cc-options .composer-chip {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; height: 36px;
+  padding: 0 8px; margin: 0; border: 0; border-radius: 8px; background: none; font-size: 13px; color: var(--text-secondary);
+}
+.cc-options .composer-chip:hover { background: rgba(255, 255, 255, 0.05); }
+.cc-options .composer-chip select { margin-left: auto; }
+.cc-options .checkbox-chip { flex-direction: row-reverse; }
+
+@media (max-width: 760px) {
+  .cc-compact .project-chip { max-width: 110px; }
+}
+@media (prefers-reduced-motion: reduce) { .cc-pop { animation: none; } }
